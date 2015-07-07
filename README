@@ -1,0 +1,2 @@
+#compilation
+gcc *.c -Wall -pthread -lm -DSECRET=\"somesecret\"
