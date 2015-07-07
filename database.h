@@ -86,7 +86,7 @@ uint8_t user_cvotestatus(user_t *u, uint32_t id);
 bool ip_postlimit(uint32_t ip, int karma);
 bool ip_commentlimit(uint32_t ip, int karma);
 
-sub_t* get_sub(const char *name, int name_len);
+sub_t* get_sub(const char *name, uint32_t name_len);
 
 domain_t* get_domain(const char *str, uint8_t *res);
 domain_t* get_domain_name(const char **p);

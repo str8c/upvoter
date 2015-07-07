@@ -78,7 +78,7 @@ static void ip_clear(iptable_t *table)
     }
 }
 
-static int domain_name(char *p, int len, const char *str, uint8_t *res)
+static uint32_t domain_name(char *p, uint32_t len, const char *str, uint8_t *res)
 {
     char *s;
     char ch;
@@ -112,7 +112,7 @@ static int domain_name(char *p, int len, const char *str, uint8_t *res)
     return (p - s);
 }
 
-static const char* valid_domain(int len, const char *str)
+static const char* valid_domain(uint32_t len, const char *str)
 {
     char ch;
 
@@ -153,14 +153,16 @@ user_t* get_user(const char *name, uint32_t pass, uint32_t ip, uint8_t *res)
     ipentry_t *entry;
 
     entry = ip_find(&iptable, ip);
-    if (!entry)
+    if (!entry) {
+        *res = 3;
         return 0;
+    }
 
     len = makelower(lower, sizeof(lower), name);
     hash = hash_user(lower);
     id = user_table[hash];
 
-    if (id != ~0) {
+    if (id != ~0u) {
         do {
             u = &user[id];
             if (!memcmp(u->lower, lower, sizeof(lower))) {
@@ -180,7 +182,7 @@ user_t* get_user(const char *name, uint32_t pass, uint32_t ip, uint8_t *res)
             }
 
             id = u->next;
-        } while (id != ~0);
+        } while (id != ~0u);
 
         if (entry->value[0] == 3) {
             *res = 2;
@@ -202,13 +204,13 @@ user_t* get_user(const char *name, uint32_t pass, uint32_t ip, uint8_t *res)
     entry->value[0]++;
 
     u = &user[id];
-    u->next = ~0;
+    u->next = ~0u;
     u->pass = pass;
     memcpy(u->lower, lower, 12);
     memcpy(u->name, name, 12);
     u->lower_len = len;
 
-    u->new = u->new_comment = u->new_vote[0] = u->new_vote[1] = u->new_inbox = ~0;
+    u->new = u->new_comment = u->new_vote[0] = u->new_vote[1] = u->new_inbox = ~0u;
     memset(u->vote_table, 0xFF, sizeof(u->vote_table));
 
     generate_cookie(u);
@@ -230,14 +232,14 @@ user_t* get_user_name(const char **p)
     hash = hash_user(lower);
     id = user_table[hash];
 
-    if (id != ~0) {
+    if (id != ~0u) {
         do {
             u = &user[id];
             if (!memcmp(u->lower, lower, sizeof(lower)))
                 return u;
 
             id = u->next;
-        } while (id != ~0);
+        } while (id != ~0u);
     }
 
     return 0;
@@ -264,7 +266,7 @@ user_t* get_user_cookie(const char *cookie)
     hash = hash_user(lower);
     id = user_table[hash];
 
-    if (id == ~0)
+    if (id == ~0u)
         return 0;
 
     do {
@@ -276,7 +278,7 @@ user_t* get_user_cookie(const char *cookie)
         }
 
         id = u->next;
-    } while (id != ~0);
+    } while (id != ~0u);
 
     return 0;
 }
@@ -294,7 +296,7 @@ int user_vote(user_t *u, bool type, uint32_t ip, uint32_t id, uint8_t value)
 
     i = u->vote_table[type][id & 255];
 
-    if (i != ~0) {
+    if (i != ~0u) {
         do {
             v = &vote[i];
             if (v->id == id) {
@@ -304,7 +306,7 @@ int user_vote(user_t *u, bool type, uint32_t ip, uint32_t id, uint8_t value)
             }
 
             i = v->next;
-        } while (i != ~0);
+        } while (i != ~0u);
 
         i = nvote++;
         v->next = i;
@@ -314,7 +316,7 @@ int user_vote(user_t *u, bool type, uint32_t ip, uint32_t id, uint8_t value)
     }
 
     v = &vote[i];
-    v->next = ~0;
+    v->next = ~0u;
     v->id = id;
     v->nextu = u->new_vote[type];
     u->new_vote[type] = i;
@@ -330,7 +332,7 @@ uint8_t user_votestatus(user_t *u, bool type, uint32_t id)
     vote_t *v;
 
     i = u->vote_table[type][id & 255];
-    if (i == ~0)
+    if (i == ~0u)
         return 0;
 
     do {
@@ -339,7 +341,7 @@ uint8_t user_votestatus(user_t *u, bool type, uint32_t id)
             return v->value;
 
         i = v->next;
-    } while (i != ~0);
+    } while (i != ~0u);
     return 0;
 }
 
@@ -375,7 +377,7 @@ bool ip_commentlimit(uint32_t ip, int karma)
     return 0;
 }
 
-sub_t* get_sub(const char *name, int name_len)
+sub_t* get_sub(const char *name, uint32_t name_len)
 {
     uint32_t hash, id;
     sub_t *s;
@@ -389,14 +391,14 @@ sub_t* get_sub(const char *name, int name_len)
 
     id = sub_table[hash];
 
-    if (id != ~0) {
+    if (id != ~0u) {
         do {
             s = &sub[id];
             if (!strcmp(s->name, name))
                 return s;
 
             id = s->next;
-        } while (id != ~0);
+        } while (id != ~0u);
 
         id = nsub++;
         s->next = id;
@@ -406,11 +408,9 @@ sub_t* get_sub(const char *name, int name_len)
     }
 
     s = &sub[id];
-    s->next = ~0;
+    s->next = ~0u;
     strcpy(s->name, name);
     memset(s->post, 0xFF, sizeof(s->post));
-    //s->hot_start = ~0;
-    //s->top_start = ~0;
 
     return s;
 }
@@ -429,14 +429,14 @@ domain_t* get_domain(const char *str, uint8_t *res)
     hash = hash_domain(name);
     id = domain_table[hash];
 
-    if (id != ~0) {
+    if (id != ~0u) {
         do {
             d = &domain[id];
             if (!strcmp(d->name, name))
                 return d;
 
             id = d->next;
-        } while (id != ~0);
+        } while (id != ~0u);
 
         id = ndomain++;
         d->next = id;
@@ -446,7 +446,7 @@ domain_t* get_domain(const char *str, uint8_t *res)
     }
 
     d = &domain[id];
-    d->next = ~0;
+    d->next = ~0u;
     strcpy(d->name, name);
     memset(d->post, 0xFF, sizeof(d->post));
 
@@ -466,14 +466,14 @@ domain_t* get_domain_name(const char **p)
     hash = hash_domain_slash(name);
     id = domain_table[hash];
 
-    if (id != ~0) {
+    if (id != ~0u) {
         do {
             d = &domain[id];
             if (strcmp_slash(d->name, name))
                 return d;
 
             id = d->next;
-        } while (id != ~0);
+        } while (id != ~0u);
     }
 
     return 0;
@@ -481,7 +481,7 @@ domain_t* get_domain_name(const char **p)
 
 void time_event(void)
 {
-    if (current_time - last_clear >= 300) {
+    if (current_time - last_clear >= 300u) {
         last_clear = current_time;
         ip_clear(&iptable);
     }

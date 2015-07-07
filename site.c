@@ -393,7 +393,7 @@ static char* comm_html(user_t *u, char *p, uint32_t id, uint32_t *index, int sor
 
     const char *ck = " checked";
 
-    while (id != ~0) {
+    while (id != ~0u) {
         comm = &comment[id];
         i = *index; *index = i + 1;
         name = user[comm->owner].name;
@@ -578,10 +578,10 @@ static void insert(sub_t *s, post_t *pt, uint32_t id)
                 pi = &domain[pt->domain].post[z];
 
             i = *pi;
-            if (i == ~0) { /* first post */
+            if (i == ~0u) { /* first post */
                 *pi = id;
-                pt->next[w][z] = ~0;
-                pt->prev[w][z] = ~0;
+                pt->next[w][z] = ~0u;
+                pt->prev[w][z] = ~0u;
                 continue;
             }
 
@@ -600,10 +600,10 @@ static void insert(sub_t *s, post_t *pt, uint32_t id)
                     break;
 
                 i = p->next[w][z];
-            } while (i != ~0);
+            } while (i != ~0u);
 
-            if (i == ~0) {
-                pt->next[w][z] = ~0;
+            if (i == ~0u) {
+                pt->next[w][z] = ~0u;
                 pt->prev[w][z] = (p - post);
                 p->next[w][z] = id;
                 continue;
@@ -612,7 +612,7 @@ static void insert(sub_t *s, post_t *pt, uint32_t id)
             pt->next[w][z] = i;
             pt->prev[w][z] = p->prev[w][z];
             p->prev[w][z] = id;
-            if (pt->prev[w][z] != ~0)
+            if (pt->prev[w][z] != ~0u)
                 post[pt->prev[w][z]].next[w][z] = id;
             else
                 *pi = id;
@@ -630,7 +630,7 @@ static void upvote(post_t *pt, uint32_t id)
     for (z = 0; z < 3; z++) {
         for (w = 0; w < 3; w++) {
             i = pt->prev[w][z];
-            if (i == ~0)
+            if (i == ~0u)
                 continue;
 
             j = (int) pt->up - pt->down;
@@ -650,7 +650,7 @@ static void upvote(post_t *pt, uint32_t id)
                     break;
 
                 i = p->prev[w][z];
-            } while (i != ~0);
+            } while (i != ~0u);
 
             if (i == pt->prev[w][z]) /* no move */
                 continue;
@@ -661,11 +661,11 @@ static void upvote(post_t *pt, uint32_t id)
 
             post[id_prev].next[w][z] = id_next;
 
-            if (id_next != ~0)
+            if (id_next != ~0u)
                 post[id_next].prev[w][z] = id_prev;
 
             /* insert (below p) */
-            if (i == ~0) { /* first */
+            if (i == ~0u) { /* first */
                 if (w == 0)
                     id_next = sub[pt->sub].post[z];
                 else if (w == 1)
@@ -673,7 +673,7 @@ static void upvote(post_t *pt, uint32_t id)
                 else
                     id_next = domain[pt->domain].post[z];
 
-                pt->prev[w][z] = ~0;
+                pt->prev[w][z] = ~0u;
                 pt->next[w][z] = id_next;
 
                 post[id_next].prev[w][z] = id;
@@ -708,7 +708,7 @@ static void downvote(post_t *pt, uint32_t id)
     for (z = 0; z < 3; z++) {
         for (w = 0; w < 3; w++) {
             i = pt->next[w][z];
-            if (i == ~0)
+            if (i == ~0u)
                 continue;
 
             j = (int) pt->up - pt->down;
@@ -727,7 +727,7 @@ static void downvote(post_t *pt, uint32_t id)
                     break;
 
                 i = p->next[w][z];
-            } while (i != ~0);
+            } while (i != ~0u);
 
             if (i == pt->next[w][z]) /* no move */
                 continue;
@@ -736,7 +736,7 @@ static void downvote(post_t *pt, uint32_t id)
             id_prev = pt->prev[w][z];
             id_next = pt->next[w][z];
 
-            if (id_prev != ~0) {
+            if (id_prev != ~0u) {
                 post[id_prev].next[w][z] = id_next;
             } else {
                 if (w == 0)
@@ -750,11 +750,11 @@ static void downvote(post_t *pt, uint32_t id)
             post[id_next].prev[w][z] = id_prev;
 
             /* insert (above p) */
-            if (i == ~0) { /* bottom */
+            if (i == ~0u) { /* bottom */
                 id_prev = (p - post);
                 p->next[w][z] = id;
 
-                pt->next[w][z] = ~0;
+                pt->next[w][z] = ~0u;
                 pt->prev[w][z] = id_prev;
                 continue;
             }
@@ -853,16 +853,16 @@ static void cinsert(post_t *pt, comment_t *comm, uint32_t id)
     double m;
 
     for (z = 0; z < 3; z++) {
-        if (comm->parent == ~0)
+        if (comm->parent == ~0u)
             pi = &pt->comment[z];
         else
             pi = &comment[comm->parent].child[z];
 
         i = *pi;
-        if (i == ~0) { /* first post */
+        if (i == ~0u) { /* first post */
             *pi = id;
-            comm->next[z] = ~0;
-            comm->prev[z] = ~0;
+            comm->next[z] = ~0u;
+            comm->prev[z] = ~0u;
             continue;
         }
 
@@ -881,10 +881,10 @@ static void cinsert(post_t *pt, comment_t *comm, uint32_t id)
                 break;
 
             i = c->next[z];
-        } while (i != ~0);
+        } while (i != ~0u);
 
-        if (i == ~0) {
-            comm->next[z] = ~0;
+        if (i == ~0u) {
+            comm->next[z] = ~0u;
             comm->prev[z] = (c - comment);
             c->next[z] = id;
             continue;
@@ -893,7 +893,7 @@ static void cinsert(post_t *pt, comment_t *comm, uint32_t id)
         comm->next[z] = i;
         comm->prev[z] = c->prev[z];
         c->prev[z] = id;
-        if (comm->prev[z] != ~0)
+        if (comm->prev[z] != ~0u)
             comment[comm->prev[z]].next[z] = id;
         else
             *pi = id;
@@ -909,7 +909,7 @@ static void cupvote(comment_t *comm, uint32_t id)
 
     for (z = 0; z < 3; z++) {
         i = comm->prev[z];
-        if (i == ~0)
+        if (i == ~0u)
             continue;
 
         j = (int) comm->up - comm->down;
@@ -928,7 +928,7 @@ static void cupvote(comment_t *comm, uint32_t id)
                 break;
 
             i = c->prev[z];
-        } while (i != ~0);
+        } while (i != ~0u);
 
         if (i == comm->prev[z]) /* no move */
             continue;
@@ -939,22 +939,22 @@ static void cupvote(comment_t *comm, uint32_t id)
 
         comment[id_prev].next[z] = id_next;
 
-        if (id_next != ~0)
+        if (id_next != ~0u)
             comment[id_next].prev[z] = id_prev;
 
         /* insert (below p) */
-        if (i == ~0) { /* first */
-            if (comm->parent == ~0)
+        if (i == ~0u) { /* first */
+            if (comm->parent == ~0u)
                 id_next = post[comm->post].comment[z];
             else
                 id_next = comment[comm->parent].child[z];
 
-            comm->prev[z] = ~0;
+            comm->prev[z] = ~0u;
             comm->next[z] = id_next;
 
             comment[id_next].prev[z] = id;
 
-            if (comm->parent == ~0)
+            if (comm->parent == ~0u)
                 post[comm->post].comment[z] = id;
             else
                 comment[comm->parent].child[z] = id;
@@ -981,7 +981,7 @@ static void cdownvote(comment_t *comm, uint32_t id)
 
     for (z = 0; z < 3; z++) {
         i = comm->next[z];
-        if (i == ~0)
+        if (i == ~0u)
             continue;
 
         j = (int) comm->up - comm->down;
@@ -1000,7 +1000,7 @@ static void cdownvote(comment_t *comm, uint32_t id)
                 break;
 
             i = c->next[z];
-        } while (i != ~0);
+        } while (i != ~0u);
 
         if (i == comm->next[z]) /* no move */
             continue;
@@ -1009,10 +1009,10 @@ static void cdownvote(comment_t *comm, uint32_t id)
         id_prev = comm->prev[z];
         id_next = comm->next[z];
 
-        if (id_prev != ~0) {
+        if (id_prev != ~0u) {
             comment[id_prev].next[z] = id_next;
         } else {
-            if (comm->parent == ~0)
+            if (comm->parent == ~0u)
                 post[comm->post].comment[z] = id_next;
             else
                 comment[comm->parent].child[z] = id_next;
@@ -1021,11 +1021,11 @@ static void cdownvote(comment_t *comm, uint32_t id)
         comment[id_next].prev[z] = id_prev;
 
         /* insert (above p) */
-        if (i == ~0) { /* bottom */
+        if (i == ~0u) { /* bottom */
             id_prev = (c - comment);
             c->next[z] = id;
 
-            comm->next[z] = ~0;
+            comm->next[z] = ~0u;
             comm->prev[z] = id_prev;
             continue;
         }
@@ -1084,7 +1084,7 @@ static bool submit_comment(pageinfo_t *info, post_t *pt, user_t *owner, const ch
     pt->ncomment++;
     if (!parent) {
         comm->next[new] = pt->comment[new];
-        comm->parent = ~0;
+        comm->parent = ~0u;
         pt->comment[new] = id;
 
         parent_u = &user[pt->owner];
@@ -1100,7 +1100,7 @@ static bool submit_comment(pageinfo_t *info, post_t *pt, user_t *owner, const ch
     parent_u->new_inbox = id;
     parent_u->ninbox++;
 
-    memset(comm->child, ~0, sizeof(comm->child));
+    memset(comm->child, ~0u, sizeof(comm->child));
 
     comm->owner = (owner - user);
     comm->time = current_time;
@@ -1226,7 +1226,7 @@ static int sub_page(pageinfo_t *info, sub_t *sub, user_t *user, const char *cont
 
     id = sub ? sub->post[tab] : frontpage.post[tab];
     i = 0;
-    while (id != ~0 && i < 25) {
+    while (id != ~0u && i < 25) {
         pt = &post[id];
         if (sub)
             p = post_html(user, pt, p, id, i++, 0);
@@ -1264,7 +1264,7 @@ static int dom_page(pageinfo_t *info, domain_t *d, user_t *user, int tab)
 
     id = d->post[tab];
     i = 0;
-    while (id != ~0 && i < 25) {
+    while (id != ~0u && i < 25) {
         pt = &post[id];
         p = post_html2(user, pt, p, id, i++);
         id = pt->next[2][tab];
@@ -1318,21 +1318,21 @@ static int user_page(pageinfo_t *info, user_t *u, user_t *login, int tab)
     i = 0;
     if (tab == 0) {
         id = u->new;
-        while (id != ~0 && i < 25) {
+        while (id != ~0u && i < 25) {
             pt = &post[id];
             p = post_html2(login, pt, p, id, i++);
             id = pt->nextu;
         }
     } if (tab == 1) {
         id = u->new_comment;
-        while (id != ~0 && i < 25) {
+        while (id != ~0u && i < 25) {
             comm = &comment[id];
             p = comm_html2(login, comm, p, id, i++);
             id = comm->nextu;
         }
     } else if (tab <= 3) {
         id = u->new_vote[0];
-        while (id != ~0 && i < 25) {
+        while (id != ~0u && i < 25) {
             v = &vote[id];
             if (v->value == tab - 1) {
                 pt = &post[v->id];
@@ -1342,7 +1342,7 @@ static int user_page(pageinfo_t *info, user_t *u, user_t *login, int tab)
         }
     } else if (tab <= 5) {
         id = u->new_vote[1];
-        while (id != ~0 && i < 25) {
+        while (id != ~0u && i < 25) {
             v = &vote[id];
             if (v->value == tab - 3) {
                 comm = &comment[v->id];
@@ -1352,7 +1352,7 @@ static int user_page(pageinfo_t *info, user_t *u, user_t *login, int tab)
         }
     } else {
         id = u->new_inbox;
-        while (id != ~0 && i < 25) {
+        while (id != ~0u && i < 25) {
             comm = &comment[id];
             p = comm_html2(login, comm, p, id, i++);
             id = comm->nexti;
@@ -1416,7 +1416,7 @@ static int login_page(pageinfo_t *info, const char *post, user_t *user)
             strcopy(p, "<div style=\"color:#D00\">wrong password</div>");
         else if (res == 1)
             strcopy(p, "<div style=\"color:#D00\">too many failed attempts, wait 5 minutes</div>");
-        else
+        else if (res == 2)
             strcopy(p, "<div style=\"color:#D00\">creating too many accounts, wait 5 minutes</div>");
 
         goto end;
@@ -1443,6 +1443,8 @@ end:
 int getpage(pageinfo_t *info, const char *path, const char *host, const char *content,
             const char *cookie, int slash_pos)
 {
+    (void) host;
+
     const char *p, *pp;
     uint32_t id;
     uint8_t value;

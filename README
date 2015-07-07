@@ -1,2 +1,2 @@
 #compilation
-gcc *.c -Wall -pthread -lm -DSECRET=\"somesecret\"
+gcc *.c -Wall -Wextra -pthread -lm -DSECRET=\"somesecret\"

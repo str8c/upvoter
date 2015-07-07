@@ -247,7 +247,7 @@ fail:
     return -1;
 }
 
-int main(int argc, char *argv[])
+int main(void)
 {
     const struct itimerspec itimer = {
         .it_interval = {.tv_sec = TIMEOUT}, .it_value = {.tv_sec = TIMEOUT},
@@ -338,7 +338,8 @@ int main(int argc, char *argv[])
                     ev->data.u32 = n;
                     epoll_ctl(efd, EPOLL_CTL_ADD, client, ev);
                 } else { /* timerfd event */
-                    read(tfd, &exp, 8); timerevent = 1;
+                    n = read(tfd, &exp, 8);
+                    timerevent = 1;
                 }
             } else { /* client socket event */
                 cl = &cl_list[n];
