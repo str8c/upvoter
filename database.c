@@ -42,11 +42,8 @@ static ipentry_t* ip_find(iptable_t *table, uint32_t ip)
     entry = root = table->entry[low];
     if (entry) {
         do {
-            if(entry->ip == high) {
-                if (ip == ip(70,31,239,1))
-                    memset(entry->value, 0, sizeof(entry->value));
+            if(entry->ip == high)
                 return entry;
-            }
         } while ((entry++)->next);
 
         i = entry - root;
@@ -210,7 +207,7 @@ user_t* get_user(const char *name, uint32_t pass, uint32_t ip, uint8_t *res)
     memcpy(u->name, name, 12);
     u->lower_len = len;
 
-    u->new = u->new_comment = u->new_vote[0] = u->new_vote[1] = u->new_inbox = ~0u;
+    u->new = u->new_comment = u->new_vote[0] = u->new_vote[1] = u->new_reply = u->new_priv = ~0u;
     memset(u->vote_table, 0xFF, sizeof(u->vote_table));
 
     generate_cookie(u);
@@ -377,6 +374,21 @@ bool ip_commentlimit(uint32_t ip, int karma)
     return 0;
 }
 
+bool ip_pmlimit(uint32_t ip)
+{
+    ipentry_t *entry;
+
+    entry = ip_find(&iptable, ip);
+    if (!entry)
+        return 1;
+
+    if (entry->value[4] >= 5)
+        return 1;
+
+    entry->value[4]++;
+    return 0;
+}
+
 sub_t* get_sub(const char *name, uint32_t name_len)
 {
     uint32_t hash, id;
@@ -530,6 +542,9 @@ void writefile(const char *path, void *data, uint32_t size)
 
 void init(void)
 {
+    printf("sizes %lu %lu %lu %lu %lu %lu %lu\n", sizeof(user_t), sizeof(vote_t), sizeof(sub_t),
+           sizeof(domain_t), sizeof(post_t), sizeof(comment_t), sizeof(privmsg_t));
+
     uint32_t len, n;
 
     last_clear = current_time;
@@ -540,6 +555,7 @@ void init(void)
     loadfile(domain, ndomain);
     loadfile(post, n); postp = post + n;
     loadfile(comment, n); commentp = comment + n;
+    loadfile(privmsg, n); privmsgp = privmsg + n;
     loadfile(text, n); textp = text + n;
 
     loadfile2(user_table);
@@ -556,6 +572,7 @@ void save(void)
     savefile(domain, ndomain);
     savefile(post, postp - post);
     savefile(comment, commentp - comment);
+    savefile(privmsg, privmsgp - privmsg);
     savefile(text, textp - text);
 
     savefile2(user_table);

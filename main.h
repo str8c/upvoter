@@ -11,7 +11,7 @@ typedef struct {
     uint32_t ip;
     uint8_t type, refresh;
     int cookie_len, redirect_len;
-    char buf[1024 * 1024];
+    char buf[1024 * 1024 * 2];
 } pageinfo_t;
 
 uint32_t current_time;

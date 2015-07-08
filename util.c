@@ -162,3 +162,110 @@ const char* readlower(char *p, uint32_t len, const char *str)
 
     return str;
 }
+
+static int tohex(char ch)
+{
+    if (ch >= '0' && ch <= '9')
+        return ch - '0';
+
+    if (ch >= 'A' && ch <= 'F')
+        return ch - 'A' + 10;
+
+    return -1;
+}
+
+static bool iswhitespace(char ch)
+{
+    return (ch == ' ' || ch == '\t');
+}
+
+static bool isignore(char ch)
+{
+    return (ch == '\r');
+}
+
+const char* text_decode(const char *p, char **textp, int level)
+{
+    char ch;
+    int h1, h2;
+    char *tp, *lp;
+    bool prev_lb, prev_ws;
+
+    tp = *textp;
+
+    if (*p != '=' || !*p)
+        return 0;
+
+    p++;
+
+    if (*p == '&' || !*p)
+        return 0;
+
+    lp = tp;
+    ch = *p++;
+    prev_lb = 1;
+    prev_ws = 1;
+    do {
+        if(ch == '+') {
+            ch = ' ';
+        } else if(ch == '%') {
+            if((h1 = tohex(p[0])) >= 0 && (h2 = tohex(p[1])) >= 0) {
+                p += 2;
+                ch = (h1 << 4) | h2;
+                if(ch == '&') {
+                    *tp++ = '&';
+                    *tp++ = 'a';
+                    *tp++ = 'm';
+                    *tp++ = 'p';
+                    ch = ';';
+                }
+            }
+        }
+
+        if(ch == '<' || ch == '>') {
+            *tp++ = '&';
+            *tp++ = (ch == '<') ? 'l' : 'g';
+            *tp++ = 't';
+            ch = ';';
+        }
+
+        if (ch == '"' && level == 2)
+            return 0;
+
+        if (ch == '\n') {
+            if (level & 2)
+                return 0;
+
+            if ((level & 1) && prev_lb)
+                continue;
+
+            prev_lb = 1;
+            *tp++ = '<';
+            *tp++ = 'b';
+            *tp++ = 'r';
+            *tp++ = '>';
+            continue;
+        } else if (iswhitespace(ch)) {
+            if (level) {
+                if (!(level & 1))
+                    return 0;
+
+                if (prev_ws)
+                    continue;
+
+                prev_ws = 1;
+            }
+        } else if (isignore(ch)) {
+            continue;
+        } else {
+            prev_lb = 0;
+            prev_ws = 0;
+            lp = tp + 1;
+        }
+        *tp++ = ch;
+    } while(*p && (ch = *p++) != '&');
+
+    *lp++ = 0;
+    *textp = lp;
+    return p;
+}

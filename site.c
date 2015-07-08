@@ -13,6 +13,7 @@ this file needs a lot of cleaning up
 
 #include "html.h"
 #include "database.h"
+#include "util.h"
 
 #define strcopy(p, str) memcpy(p, str, sizeof(str) - 1), p += sizeof(str) - 1
 
@@ -23,6 +24,8 @@ static const char* user_tabs[] = {
     "downvoted",
     "liked",
     "disliked",
+    "msg",
+    "replies",
     "inbox",
     SECRET,
     0,
@@ -61,17 +64,6 @@ bool valid_title(const char *p)
     return res;
 }
 
-static int tohex(char ch)
-{
-    if (ch >= '0' && ch <= '9')
-        return ch - '0';
-
-    if (ch >= 'A' && ch <= 'F')
-        return ch - 'A' + 10;
-
-    return -1;
-}
-
 static const char* get_text_name(const char *p, char *res, int res_len)
 {
     char ch;
@@ -95,57 +87,6 @@ static const char* get_text_name(const char *p, char *res, int res_len)
     } while(*p && (ch = *p++) != '&');
 
     *res++ = 0;
-    return p;
-}
-
-static const char* get_text_encoded(const char *p)
-{
-    char ch;
-    int h1, h2;
-
-    if (*p != '=' || !*p)
-        return 0;
-
-    p++;
-
-    if (*p == '&' || !*p)
-        return 0;
-
-    ch = *p++;
-    do {
-        if(ch == '+') {
-            ch = ' ';
-        } else if(ch == '%') {
-            if((h1 = tohex(p[0])) >= 0 && (h2 = tohex(p[1])) >= 0) {
-                p += 2;
-                ch = (h1 << 4) | h2;
-                if(ch == '&') {
-                    *textp++ = '&';
-                    *textp++ = 'a';
-                    *textp++ = 'm';
-                    *textp++ = 'p';
-                    *textp++ = ';';
-                    continue;
-                }
-
-                if(ch == '\n') {
-                    *textp++ = '<'; *textp++ = 'b'; *textp++ = 'r'; *textp++ = '>';
-                    continue;
-                }
-            }
-        }
-
-        if(ch == '<' || ch == '>') {
-            *textp++ = '&';
-            *textp++ = (ch == '<') ? 'l' : 'g';
-            *textp++ = 't';
-            *textp++ = ';';
-            continue;
-        }
-
-        *textp++ = ch;
-    } while(*p && (ch = *p++) != '&');
-    *textp++ = 0;
     return p;
 }
 
@@ -191,38 +132,51 @@ static void print_id_str(char *p, uint32_t id)
     *p++ = 0;
 }
 
-static int print_time_str(char *p, uint32_t time)
+/* takes up to 16 byte p */
+static int print_time_str(char *p, uint32_t time, uint32_t edit_time)
 {
+    int len;
+
     time = current_time - time;
 
-    if (time < 60)
-        return sprintf(p, "%u seconds ago", time); //15
-
-    time /= 60;
     if (time < 60) {
-        if (time == 1)
-            return sprintf(p, "a minute ago");
-        return sprintf(p, "%u minutes ago", time);
+        len = sprintf(p, "%u seconds ago", time);
+    } else {
+        time /= 60;
+        if (time < 60) {
+            if (time == 1)
+                len = sprintf(p, "a minute ago");
+            else
+                len = sprintf(p, "%u minutes ago", time);
+        } else {
+            time /= 60;
+            if (time < 24) {
+                if (time == 1)
+                    len = sprintf(p, "an hour ago");
+                else
+                    len = sprintf(p, "%u hours ago", time);
+            } else {
+                time /= 24;
+                if (time < 365) {
+                    if (time == 1)
+                        len = sprintf(p, "a day ago");
+                    else
+                        len = sprintf(p, "%u days ago", time);
+                } else {
+                    time /= 365;
+                    if (time == 1)
+                        len = sprintf(p, "a year ago");
+                    else
+                        len = sprintf(p, "%u years ago", time);
+                }
+            }
+        }
     }
 
-    time /= 60;
-    if (time < 24) {
-        if (time == 1)
-            return sprintf(p, "an hour ago");
-        return sprintf(p, "%u hours ago", time);
-    }
-
-    time /= 24;
-    if (time < 365) {
-        if (time == 1)
-            return sprintf(p, "a day ago");
-        return sprintf(p, "%u days ago", time);
-    }
-
-    time /= 365;
-    if (time == 1)
-        return sprintf(p, "a year ago");
-    return sprintf(p, "%u years ago", time);
+    if (edit_time)
+        p[len++] = '*';
+    p[len] = 0;
+    return len;
 }
 
 static char* topbar_end(char *p, user_t *user)
@@ -231,8 +185,9 @@ static char* topbar_end(char *p, user_t *user)
             "<a class=\"b1\" href=\"/\">frontpage</a> | ");
     if (user) {
     p += sprintf(p, "logged in as <a class=\"b1\" href=\"/u/%s/\">%s</a> | ", user->name, user->name);
-    if (user->ninbox)
-        p += sprintf(p, "<a class=\"b2\" href=\"/u/%s/inbox\">inbox (%u)</a>", user->name, user->ninbox);
+    if (user->nreply + user->npriv)
+        p += sprintf(p, "<a class=\"b2\" href=\"/u/%s/%s\">inbox (%u)</a>",
+                     user->name, user->npriv ? "inbox" : "replies", user->nreply + user->npriv);
     else
         p += sprintf(p, "<a class=\"b1\" href=\"/u/%s/inbox\">inbox</a>", user->name);
 
@@ -256,9 +211,8 @@ static char* post_html(user_t *u, post_t *post, char *p, uint32_t id, uint32_t i
     uint8_t vote;
 
     print_id_str(id_str, id);
-    print_time_str(time_str, post->time);
+    print_time_str(time_str, post->time, post->edit_time);
 
-    dom = domain[post->domain].name;
     owner = &user[post->owner];
     name = owner->name;
     karma = post->up - post->down;
@@ -266,9 +220,9 @@ static char* post_html(user_t *u, post_t *post, char *p, uint32_t id, uint32_t i
 
     strcopy(p, "<tr><td class=\"v\">");
 
-    if (u) {
-        const char *ck = " checked";
+    const char *ck = " checked";
 
+    if (u) {
         vote = user_votestatus(u, 0, id);
         if (vote == 1)
             karma--;
@@ -297,86 +251,53 @@ static char* post_html(user_t *u, post_t *post, char *p, uint32_t id, uint32_t i
             karma);
     }
 
+    if (post->domain != ~0u) {
+
+            dom = domain[post->domain].name;
+
     p += sprintf(p,
         "<td class=\"u\">"
         "<a href=\"%s%s\">%s</a> "
-        "<span class=\"c\">(<a class=\"b\" href=\"/d/%s/\">%s</a>)</span><br>"
+        "<span class=\"c\">(<a class=\"b\" href=\"/d/%s/\">%s</a>)</span><br>",
+
+        post->has_protocol ? "" : "http://",
+        text + post->text, text + post->title, dom, dom
+    );
+    } else {
+    p += sprintf(p,
+        "<td class=\"u\">"
+        "<a href=\"/%s/%s/\">%s</a> "
+        "<span class=\"c\">(<a class=\"b\" href=\"/%s/\">self.%s</a>)</span><br>"
+        "<input class=\"x\" type=\"checkbox\" id=\"s%u\" autocomplete=\"off\"%s>"
+        "<label class=\"z\" for=\"s%u\">[+]</label>"
+        "<label class=\"w\" for=\"s%u\">[-]</label> ",
+        sub[post->sub].name, id_str, text + post->title, sub[post->sub].name, sub[post->sub].name,
+        i, type == 2 ? "" : ck, i, i
+    );
+    }
+
+    if (!(type & 1)) {
+        p += sprintf(p,
         "<span class=\"d\">submitted %s by <a class=\"a\" href=\"/u/%s/\">%s</a></span><br>"
-        "<a class=\"e\" href=\"%s/\">%u comments</a>"
-        "</td>"
-        "</tr>",
-        post->has_protocol ? "" : "http://",
-        text + post->text, text + post->title, dom, dom, time_str, name, name, type ? "." : id_str,
-        post->ncomment
-    );
-
-    return p;
-}
-
-static char* post_html2(user_t *u, post_t *post, char *p, uint32_t id, uint32_t i)
-{
-    char id_str[9], time_str[16];
-    user_t *owner;
-    const char *name, *dom;
-    int karma;
-    uint8_t vote;
-    sub_t *s;
-
-    print_id_str(id_str, id);
-    print_time_str(time_str, post->time);
-
-    dom = domain[post->domain].name;
-    owner = &user[post->owner];
-    name = owner->name;
-    karma = post->up - post->down;
-    s = &sub[post->sub];
-
-    strcopy(p, "<tr><td class=\"v\">");
-
-    if (u) {
-        const char *ck = " checked";
-
-        vote = user_votestatus(u, 0, id);
-        if (vote == 1)
-            karma--;
-        if (vote == 2)
-            karma++;
-
-        p += sprintf(p,
-            "<form style=\"margin:0px\" method=\"POST\" action=\"/v/%s/\" target=\"h\" autocomplete=\"off\">"
-"<input class=\"l\" type=\"radio\" name=\"a\" value=\"0\" id=\"a%u\" onclick=\"this.form.submit()\"%s>"
-"<input class=\"m\" type=\"radio\" name=\"a\" value=\"0\" id=\"b%u\" onclick=\"this.form.submit()\">"
-"<input class=\"n\" type=\"radio\" name=\"a\" value=\"1\" id=\"c%u\" onclick=\"this.form.submit()\"%s>"
-"<input class=\"o\" type=\"radio\" name=\"a\" value=\"2\" id=\"d%u\" onclick=\"this.form.submit()\"%s>"
-
-            "<label class=\"p\" for=\"c%u\"></label><label class=\"r\" for=\"a%u\"></label><br>"
-            "<span class=\"t\">%i</span><span class=\"r1\">%i</span><span class=\"s1\">%i</span><br>"
-            "<label class=\"q\" for=\"d%u\"></label><label class=\"s\" for=\"b%u\"></label><br>"
-            "</form></td>",
-            id_str, i, vote == 0 ? ck : "", i, i, vote == 1 ? ck : "", i, vote == 2 ? ck : "",
-            i, i, karma, karma + 1, karma - 1, i, i
+        "<a class=\"e\" href=\"/%s/%s/\">%u comments</a>",
+        time_str, name, name, sub[post->sub].name, id_str, post->ncomment
         );
     } else {
         p += sprintf(p,
-            "<input class=\"l\" type=\"radio\" checked>"
-            "<span class=\"p\"></span><span class=\"r\"></span><br><span class=\"t\">%i</span><br>"
-            "<span class=\"q\"></span><span class=\"s\"></span><br></td>",
-            karma);
+        "<span class=\"d\">submitted %s by <a class=\"a\" href=\"/u/%s/\">%s</a>"
+        " to <a class=\"a\" href=\"/%s/\">/%s</a>"
+        "</span><br>"
+        "<a class=\"e\" href=\"/%s/%s/\">%u comments</a>",
+        time_str, name, name, sub[post->sub].name, sub[post->sub].name,
+        sub[post->sub].name, id_str, post->ncomment
+        );
     }
 
-    p += sprintf(p,
-        "<td class=\"u\">"
-        "<a href=\"%s%s\">%s</a> "
-        "<span class=\"c\">(<a class=\"b\" href=\"/d/%s/\">%s</a>)</span><br>"
-        "<span class=\"d\">submitted %s by <a class=\"a\" href=\"/u/%s/\">%s</a>"
-        " to <a class=\"a\" href=\"/%s/\">/%s</a></span><br>"
-        "<a class=\"e\" href=\"/%s/%s/\">%u comments</a>"
-        "</td>"
-        "</tr>",
-        post->has_protocol ? "" : "http://",
-        text + post->text, text + post->title, dom, dom, time_str, name, name,
-        s->name, s->name, s->name, id_str, post->ncomment
-    );
+    if (post->domain == ~0u) {
+        p += sprintf(p, "<div class=\"w\">%s</div>", text + post->text);
+    }
+
+    strcopy(p, "</td></tr>");
 
     return p;
 }
@@ -386,6 +307,7 @@ static char* comm_html(user_t *u, char *p, uint32_t id, uint32_t *index, int sor
 {
     char id_str[9], time_str[16];
     comment_t *comm;
+    user_t *owner;
     const char *name;
     uint32_t i;
     uint8_t vote;
@@ -396,10 +318,11 @@ static char* comm_html(user_t *u, char *p, uint32_t id, uint32_t *index, int sor
     while (id != ~0u) {
         comm = &comment[id];
         i = *index; *index = i + 1;
-        name = user[comm->owner].name;
+        owner = &user[comm->owner];
+        name = owner->name;
 
         print_id_str(id_str, id);
-        print_time_str(time_str, comm->time);
+        print_time_str(time_str, comm->time, comm->edit_time);
 
         karma = comm->up - comm->down;
         if (u) {
@@ -448,10 +371,12 @@ static char* comm_html(user_t *u, char *p, uint32_t id, uint32_t *index, int sor
 "<label class=\"z\" for=\"s%u\">[+]</label>"
 "<label class=\"w\" for=\"s%u\">[-]</label> "
 "<input class=\"l\" type=\"radio\" checked>"
-"<a class=\"h\" href=\"/u/%s/\">%s</a> <span class=\"t\">%i</span> points %s "
+"<a class=\"h\" %shref=\"/u/%s/\">%s</a> <span class=\"t\">%i</span> points %s "
 "<div class=\"w\">"
 "<span class=\"k\">%s</span><br>",
-                depth ? " class=\"y\"" : "", i, i, i, name, name, karma, time_str, text + comm->text
+                depth ? " class=\"y\"" : "", i, i, i,
+                user[comm->owner].admin ? " style=\"color:#D00\"" : "",
+                name, name, karma, time_str, text + comm->text
             );
         }
 
@@ -460,7 +385,10 @@ static char* comm_html(user_t *u, char *p, uint32_t id, uint32_t *index, int sor
             p += sprintf(p,
             "<input class=\"x2\" type=\"radio\" name=\"x%u\" id=\"r%u\" checked>"
             "<input class=\"x1\" type=\"radio\" name=\"x%u\" id=\"t%u\">"
-            "<label class=\"y1\" for=\"t%u\">reply</label> "
+            "<label class=\"y1\" for=\"t%u\">%s</label> ", i, i, i, i, i,
+            u == owner ? "edit" : "reply");
+
+            p += sprintf(p,
             "<div class=\"y2\">"
             "<form method=\"POST\">"
             "<input type=\"hidden\" name=\"b\" value=\"%s\">"
@@ -468,7 +396,9 @@ static char* comm_html(user_t *u, char *p, uint32_t id, uint32_t *index, int sor
             "<input type=\"submit\" value=\"Submit\">"
             "</form>"
             " <label for=\"r%u\">cancel</label></div>",
-            i, i, i, i, i, id_str, i);
+            id_str, i);
+        } else {
+            strcopy(p, "<br>");
         }
 
         p = comm_html(u, p, comm->child[sort], index, sort, depth + 1);
@@ -494,7 +424,7 @@ static char* comm_html2(user_t *u, comment_t *comm, char *p, uint32_t id, uint32
 
     print_id_str(id_str, id);
     print_id_str(id_str_post, comm->post);
-    print_time_str(time_str, comm->time);
+    print_time_str(time_str, comm->time, comm->edit_time);
 
     pt = &post[comm->post];
     sname = sub[pt->sub].name;
@@ -556,7 +486,26 @@ static char* comm_html2(user_t *u, comment_t *comm, char *p, uint32_t id, uint32
         );
     }
 
+    strcopy(p, "<br>");
+
     strcopy(p, "</div></div>");
+
+    return p;
+}
+
+static char* priv_html(privmsg_t *msg, char *p, uint32_t i)
+{
+    (void) i;
+    const char *name;
+    char time_str[16];
+
+    name = user[msg->from].name;
+    print_time_str(time_str, msg->time, 0);
+
+    p += sprintf(p,
+                 "<div>from <a class=\"h\" href=\"/u/%s/\">%s</a>"
+                 " %s<br><span class=\"k\">%s</span></div>",
+                name, name, time_str, text + msg->text);
 
     return p;
 }
@@ -568,8 +517,8 @@ static void insert(sub_t *s, post_t *pt, uint32_t id)
     post_t *p;
     double m;
 
-    for (z = 0; z < 3; z++) {
-        for (w = 0; w < 3; w++) {
+    for (z = 0; z < 4; z++) {
+        for (w = 0; w < 2 + (pt->domain != ~0u); w++) {
             if (w == 0)
                 pi = &s->post[z];
             else if (w == 1)
@@ -588,6 +537,9 @@ static void insert(sub_t *s, post_t *pt, uint32_t id)
             do {
                 p = &post[i];
                 k = (int) p->up - p->down;
+
+                if (z == 3)
+                    break;
 
                 if (z == 0)
                     m = exp2((double) ((int) pt->time -  (int) p->time) / 86400.0);
@@ -628,7 +580,7 @@ static void upvote(post_t *pt, uint32_t id)
     double m;
 
     for (z = 0; z < 3; z++) {
-        for (w = 0; w < 3; w++) {
+        for (w = 0; w < 2 + (pt->domain != ~0u); w++) {
             i = pt->prev[w][z];
             if (i == ~0u)
                 continue;
@@ -706,7 +658,7 @@ static void downvote(post_t *pt, uint32_t id)
     double m;
 
     for (z = 0; z < 3; z++) {
-        for (w = 0; w < 3; w++) {
+        for (w = 0; w < 2 + (pt->domain != ~0u); w++) {
             i = pt->next[w][z];
             if (i == ~0u)
                 continue;
@@ -776,6 +728,7 @@ static bool submit(pageinfo_t *info, sub_t *s, user_t *owner, const char *p, uin
     domain_t *dom;
     char *textp_old, *tp;
     uint32_t id;
+    bool textpost;
 
     textp_old = textp;
     pt = postp;
@@ -787,23 +740,28 @@ static bool submit(pageinfo_t *info, sub_t *s, user_t *owner, const char *p, uin
 
     tp = textp;
     pt->title = textp - text;
-    p = get_text_encoded(p);
+    p = text_decode(p, &textp, decode_title);
     if (!p || (textp - tp) > 128 || !valid_title(text + pt->title))
         goto fail;
 
-    if (*p++ != 'b')
+    if (*p != 'b' && *p != 'c')
         goto fail;
+
+    textpost = (*p == 'c');
+    p++;
 
     tp = textp;
     pt->text = textp - text;
-    p = get_text_encoded(p);
-    if (!p || (textp - tp) > 256 || !(textp - tp))
+    p = text_decode(p, &textp, textpost ? decode_comment : decode_url);
+    if (!p || (textp - tp) > (textpost ? 2048 : 256) || !(textp - tp))
         goto fail;
 
-    dom = get_domain(text + pt->text, &pt->has_protocol);
-    if (!dom) {
-        *res = 1;
-        goto fail;
+    if (!textpost) {
+        dom = get_domain(text + pt->text, &pt->has_protocol);
+        if (!dom) {
+            *res = 1;
+            goto fail;
+        }
     }
 
     if (ip_postlimit(info->ip, owner->karma_post)) {
@@ -813,19 +771,10 @@ static bool submit(pageinfo_t *info, sub_t *s, user_t *owner, const char *p, uin
 
     pt->owner = (owner - user);
     pt->time = current_time;
-    pt->domain = (dom - domain);
+    pt->domain = textpost ? ~0u : (dom - domain);
     pt->sub = (s - sub);
     memset(pt->comment, 0xFF, sizeof(pt->comment));
     pt->up = 1;
-
-    pt->next[0][new] = s->post[new];
-    s->post[new] = id;
-
-    pt->next[1][new] = frontpage.post[new];
-    frontpage.post[new] = id;
-
-    pt->next[2][new] = dom->post[new];
-    dom->post[new] = id;
 
     pt->nextu = owner->new;
     owner->new = id;
@@ -1045,11 +994,9 @@ static bool submit_comment(pageinfo_t *info, post_t *pt, user_t *owner, const ch
     comment_t *comm, *parent;
     user_t *parent_u;
     char *textp_old, *tp;
-    uint32_t id, parent_id;
+    uint32_t id, parent_id, t;
 
     textp_old = textp;
-    comm = commentp;
-    id = comm - comment;
     parent = 0;
     *res = 0;
 
@@ -1071,8 +1018,8 @@ static bool submit_comment(pageinfo_t *info, post_t *pt, user_t *owner, const ch
         goto fail;
 
     tp = textp;
-    comm->text = textp - text;
-    p = get_text_encoded(p);
+    t = textp - text;
+    p = text_decode(p, &textp, decode_comment);
     if (!p || (textp - tp) > 2048)
         goto fail;
 
@@ -1081,24 +1028,39 @@ static bool submit_comment(pageinfo_t *info, post_t *pt, user_t *owner, const ch
         goto fail;
     }
 
+    if (!parent) {
+        parent_u = &user[pt->owner];
+    } else {
+        parent_u = &user[parent->owner];
+        if (parent_u == owner) {
+            comm = &comment[parent_id];
+            comm->text = t;
+            comm->edit_time = current_time;
+            info->refresh = 1;
+            return 1;
+        }
+    }
+
+    comm = commentp;
+    id = comm - comment;
+    comm->text = t;
+
     pt->ncomment++;
+
+
     if (!parent) {
         comm->next[new] = pt->comment[new];
         comm->parent = ~0u;
         pt->comment[new] = id;
-
-        parent_u = &user[pt->owner];
     } else {
         comm->next[new] = parent->child[new];
         comm->parent = parent_id;
         parent->child[new] = id;
-
-        parent_u = &user[parent->owner];
     }
 
-    comm->nexti = parent_u->new_inbox;
-    parent_u->new_inbox = id;
-    parent_u->ninbox++;
+    comm->nexti = parent_u->new_reply;
+    parent_u->new_reply = id;
+    parent_u->nreply++;
 
     memset(comm->child, ~0u, sizeof(comm->child));
 
@@ -1122,6 +1084,47 @@ fail:
     return 0;
 }
 
+static bool submit_priv(pageinfo_t *info, user_t *to, user_t *from, const char *p, uint8_t *res)
+{
+    privmsg_t *msg;
+    char *textp_old, *tp;
+    uint32_t id;
+
+    textp_old = textp;
+    msg = privmsgp;
+    id = msg - privmsg;
+    *res = 0;
+
+    if (*p++ != 'a')
+        goto fail;
+
+    tp = textp;
+    msg->text = textp - text;
+    p = text_decode(p, &textp, decode_comment);
+    if (!p || (textp - tp) > 2048)
+        goto fail;
+
+    if (ip_pmlimit(info->ip)) {
+        *res = 1;
+        goto fail;
+    }
+
+    msg->from = (from - user);
+    msg->time = current_time;
+
+    msg->next = to->new_priv;
+    to->new_priv = id;
+    to->npriv++;
+
+    privmsgp++;
+
+    info->refresh = 1;
+    return 1;
+fail:
+    textp = textp_old;
+    return 0;
+}
+
 static int post_page(pageinfo_t *info, sub_t *sub, user_t *u, post_t *pt, const char *content, int sort)
 {
     char *p;
@@ -1130,7 +1133,7 @@ static int post_page(pageinfo_t *info, sub_t *sub, user_t *u, post_t *pt, const 
 
     p = info->buf;
 
-    strcopy(p, html_post_head);
+    strcopy(p, html_head);
 
     p += sprintf(p, "<title>/%s: %s</title>", sub->name, text + pt->title);
 
@@ -1141,7 +1144,7 @@ static int post_page(pageinfo_t *info, sub_t *sub, user_t *u, post_t *pt, const 
 
     p = topbar_end(p, u);
 
-    p = post_html(u, pt, p, (pt - post), 0, 1);
+    p = post_html(u, pt, p, (pt - post), 0, 2);
 
     strcopy(p, "</table><div style=\"margin:5px 0px 0px 10px;font-size:12px\">");
 
@@ -1186,7 +1189,7 @@ static int sub_page(pageinfo_t *info, sub_t *sub, user_t *user, const char *cont
 
     p = info->buf;
 
-    strcopy(p, html_main_head);
+    strcopy(p, html_head);
     p += sprintf(p, "<title>/%s</title>", sub ? sub->name : "");
     strcopy(p, html_body);
     p += sprintf(p, "<a style=\"color:#000\" href=\".\">/%s</a> |", sub ? sub->name : "");
@@ -1228,10 +1231,7 @@ static int sub_page(pageinfo_t *info, sub_t *sub, user_t *user, const char *cont
     i = 0;
     while (id != ~0u && i < 25) {
         pt = &post[id];
-        if (sub)
-            p = post_html(user, pt, p, id, i++, 0);
-        else
-            p = post_html2(user, pt, p, id, i++);
+        p = post_html(user, pt, p, id, i++, sub == 0);
         id = pt->next[!sub][tab];
     }
 
@@ -1248,7 +1248,7 @@ static int dom_page(pageinfo_t *info, domain_t *d, user_t *user, int tab)
 
     p = info->buf;
 
-    strcopy(p, html_main_head);
+    strcopy(p, html_head);
     p += sprintf(p, "<title>/d/%s</title>", d->name);
     strcopy(p, html_body);
     p += sprintf(p, "<a style=\"color:#000\" href=\".\">/d/%s</a> |", d->name);
@@ -1266,7 +1266,7 @@ static int dom_page(pageinfo_t *info, domain_t *d, user_t *user, int tab)
     i = 0;
     while (id != ~0u && i < 25) {
         pt = &post[id];
-        p = post_html2(user, pt, p, id, i++);
+        p = post_html(user, pt, p, id, i++, 1);
         id = pt->next[2][tab];
     }
 
@@ -1274,22 +1274,31 @@ static int dom_page(pageinfo_t *info, domain_t *d, user_t *user, int tab)
     return p - info->buf;
 }
 
-static int user_page(pageinfo_t *info, user_t *u, user_t *login, int tab)
+static int user_page(pageinfo_t *info, user_t *u, user_t *login, const char *content, int tab)
 {
     char *p;
     uint32_t id, i;
+    uint8_t res;
     post_t *pt;
     comment_t *comm;
     vote_t *v;
+    privmsg_t *pm;
 
-    if (tab == 6 && login != u)
+    if (tab >= 7) {
+        if (u != login)
+            return -1;
+
+        if (tab == 7)
+            u->nreply = 0;
+        else
+            u->npriv = 0;
+    }
+    else if (tab == 6 && !login)
         return -1;
-    else
-        u->ninbox = 0;
 
     p = info->buf;
 
-    strcopy(p, html_post_head);
+    strcopy(p, html_head);
     p += sprintf(p, "<title>/u/%s</title>", u->name);
     strcopy(p, html_body);
     p += sprintf(p, "<a style=\"color:#000\" href=\".\">/u/%s</a> (%i, %i) ", u->name,
@@ -1305,42 +1314,50 @@ static int user_page(pageinfo_t *info, user_t *u, user_t *login, int tab)
                  'f' + (tab == 5)
     );
 
-    if (tab >= 6) {
+    if (login == u) {
     p += sprintf(p,
-        "|<a class=\"%C\" href=\"inbox\">inbox</a>",
+        "|<a class=\"%C\" href=\"replies\">replies (%u)</a>"
+        "|<a class=\"%C\" href=\"inbox\">private (%u)</a>",
+        'f' + (tab == 7), u->nreply, 'f' + (tab == 8), u->npriv
+    );
+    } else if (login) {
+    p += sprintf(p,
+        "|<a class=\"%C\" href=\"msg\">send message</a>",
         'f' + (tab == 6)
     );
     }
 
     p = topbar_end(p, login);
-    strcopy(p, "<div style=\"margin:5px 0px 0px 10px;font-size:12px\">");
 
     i = 0;
     if (tab == 0) {
         id = u->new;
         while (id != ~0u && i < 25) {
             pt = &post[id];
-            p = post_html2(login, pt, p, id, i++);
+            p = post_html(login, pt, p, id, i++, 1);
             id = pt->nextu;
         }
     } if (tab == 1) {
+        strcopy(p, "<div style=\"margin:5px 0px 0px 10px;font-size:12px\">");
         id = u->new_comment;
         while (id != ~0u && i < 25) {
             comm = &comment[id];
             p = comm_html2(login, comm, p, id, i++);
             id = comm->nextu;
         }
+        strcopy(p, "</div>");
     } else if (tab <= 3) {
         id = u->new_vote[0];
         while (id != ~0u && i < 25) {
             v = &vote[id];
             if (v->value == tab - 1) {
                 pt = &post[v->id];
-                p = post_html2(login, pt, p, v->id, i++);
+                p = post_html(login, pt, p, v->id, i++, 1);
             }
             id = v->nextu;
         }
     } else if (tab <= 5) {
+        strcopy(p, "<div style=\"margin:5px 0px 0px 10px;font-size:12px\">");
         id = u->new_vote[1];
         while (id != ~0u && i < 25) {
             v = &vote[id];
@@ -1350,16 +1367,42 @@ static int user_page(pageinfo_t *info, user_t *u, user_t *login, int tab)
             }
             id = v->nextu;
         }
-    } else {
-        id = u->new_inbox;
+        strcopy(p, "</div>");
+    } else if (tab == 6) {
+        strcopy(p, "<form method=\"POST\">"
+                "<textarea name=\"a\" class=\"text\" maxlength=\"2048\"></textarea><br>"
+                "<input type=\"submit\" value=\"Submit\">"
+                "</form>");
+
+        if (content) {
+            if (!submit_priv(info, u, login, content, &res)) {
+                if (res == 0)
+                    strcopy(p, " <span class=\"b2\">invalid input</span>");
+                else
+                    strcopy(p, " <span class=\"b2\">reached limit, wait 5 minutes</span>");
+            } else {
+                strcopy(p, " <span class=\"b2\">message sent</span>");
+            }
+        }
+    } else if (tab == 7) {
+        strcopy(p, "<div style=\"margin:5px 0px 0px 10px;font-size:12px\">");
+        id = u->new_reply;
         while (id != ~0u && i < 25) {
             comm = &comment[id];
             p = comm_html2(login, comm, p, id, i++);
             id = comm->nexti;
         }
+        strcopy(p, "</div>");
+    } else {
+        strcopy(p, "<div style=\"margin:5px 0px 0px 10px;font-size:12px\">");
+        id = u->new_priv;
+        while (id != ~0u && i < 25) {
+            pm = &privmsg[id];
+            p = priv_html(pm, p, i++);
+            id = pm->next;
+        }
+        strcopy(p, "</div>");
     }
-
-    strcopy(p, "</div>");
 
     strcopy(p, html_main_end);
     return p - info->buf;
@@ -1398,7 +1441,7 @@ static int login_page(pageinfo_t *info, const char *post, user_t *user)
 
     textp_old = textp;
     pass = textp - text;
-    post = get_text_encoded(post);
+    post = text_decode(post, &textp, decode_raw);
     if (!post || (textp - textp_old) > 256) {
         textp = textp_old;
         goto end;
@@ -1446,9 +1489,9 @@ int getpage(pageinfo_t *info, const char *path, const char *host, const char *co
     (void) host;
 
     const char *p, *pp;
-    uint32_t id;
+    uint32_t id, *pi;
     uint8_t value;
-    int prev;
+    int prev, z, w;
     user_t *login, *u;
     sub_t *s;
     post_t *pt;
@@ -1484,13 +1527,13 @@ int getpage(pageinfo_t *info, const char *path, const char *host, const char *co
             u = get_user_name(&p);
             if (u) {
                 tab = get_tab(p, user_tabs);
-                if (tab == 7) {
+                if (tab == 9) {
                     u->admin = 1;
-                    return -1;
+                    return -2;
                 }
 
                 if (tab >= 0)
-                    return user_page(info, u, login, tab);
+                    return user_page(info, u, login, content, tab);
             }
         }
 
@@ -1605,6 +1648,32 @@ int getpage(pageinfo_t *info, const char *path, const char *host, const char *co
 
             if (!strcmp(pp, "top"))
                 return post_page(info, s, login, pt, content, top);
+
+            if (!strcmp(pp, SECRET)) {
+                for (w = 0; w < 2 + (pt->domain != ~0u); w++) {
+                    if (w == 0)
+                        pi = s->post;
+                    else if (w == 1)
+                        pi = frontpage.post;
+                    else
+                        pi = domain[pt->domain].post;
+
+                    for (z = 0; z < 4; z++) {
+                        if (pt->next[w][z] != ~0u) {
+                            post[pt->next[w][z]].prev[w][z] = pt->prev[w][z];
+                            pt->next[w][z] = ~0u;
+                        }
+
+                        if (pt->prev[w][z] != ~0u) {
+                            post[pt->prev[w][z]].next[w][z] = pt->next[w][z];
+                            pt->prev[w][z] = ~0u;
+                        } else {
+                            pi[z] = pt->next[w][z];
+                        }
+                    }
+                }
+                return -2;
+            }
 
             return -1;
         }
