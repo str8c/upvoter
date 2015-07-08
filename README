@@ -1,2 +1,8 @@
 #compilation
-gcc *.c -Wall -Wextra -pthread -lm -DSECRET=\"somesecret\"
+gcc *.c -Wall -Wextra -lm -DSECRET=\"somesecret\"
+
+#license
+GPLv3
+
+#notes
+if using the default port (80) you need to run as root
