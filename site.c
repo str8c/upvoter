@@ -597,7 +597,6 @@ static void upvote(post_t *pt, uint32_t id)
                 else
                     m = 1.0;
 
-                printf("%f %f %u %u %u\n", (double) k, (double) j * m, z, pt->time, p->time);
                 if ((double) k > (double) j * m)
                     break;
 
