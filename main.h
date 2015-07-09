@@ -9,9 +9,7 @@ typedef struct {
     void *cookie;
     void *redirect;
     uint32_t ip;
-    uint8_t type, refresh;
+    uint8_t type;
     int cookie_len, redirect_len;
     char buf[1024 * 1024 * 2];
 } pageinfo_t;
-
-uint32_t current_time;

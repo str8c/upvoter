@@ -19,8 +19,7 @@
 #include <errno.h>
 
 /* functions to call */
-int getpage(pageinfo_t *info, const char *path, const char *host, const char *post, const char *cookie,
-            int slash_pos);
+int getpage(pageinfo_t *info, const char *path, const char *host, const char *data, const char *cookie);
 void time_event(void);
 void init(void);
 
@@ -87,9 +86,11 @@ static void client_free(client_t *cl)
     HTTP header must always be complete (single read), but POST data can be incomplete
      *parses the whole header every time there is new POST data
 */
+
+#define cmp(p, str) (!memcmp(*(p), str, sizeof(str) - 1) && (*(p) += sizeof(str) - 1, 1))
 static void do_request(client_t *cl)
 {
-    int len, res, slash_pos, content_length;
+    int len, res, content_length;
     char *p, *path, *host, *cookie, *content;
     bool post;
 
@@ -108,21 +109,10 @@ static void do_request(client_t *cl)
         goto invalid;
 
     /* parse requested path */
-    len = 256;
-    slash_pos = -1;
     path = p;
-    for (; *p != ' '; p++) {
-        /* dont allow long paths or paths with aliases */
-        if(!--len || !*p || (*p == '.' && *(p + 1) == '/')) {
+    for (; *p != ' '; p++)
+        if (!*p)
             goto invalid;
-        }
-
-        /* added: replace first slash with a null terminator */
-        if (*p == '/' && slash_pos < 0) {
-            *p = 0;
-            slash_pos = p - path;
-        }
-    }
     *p++ = 0; /* null-terminate the path */
 
     /* parse rest of header */
@@ -138,31 +128,28 @@ static void do_request(client_t *cl)
         *p = 0; p += 2;
 
         /* host */
-        if (!memcmp(p, "Host: ", 6)) {
-            p += 6;
+        if (cmp(&p, "Host: ")) {
             host = p;
             continue;
         }
 
         /* cookie */
-        if (!memcmp(p, "Cookie: name=", 13)) {
-            p += 13;
+        if (cmp(&p, "Cookie: name=")) {
             cookie = p;
             continue;
         }
 
         /* content-length */
-        if(!memcmp(p, "Content-Length: ", 16)) {
-            content_length = strtoul(p + 16, &p, 0);
+        if(cmp(&p, "Content-Length: ")) {
+            content_length = strtoul(p, &p, 0);
             continue;
         }
 
-        if (!memcmp(p, "\r\n", 2))
+        if (cmp(&p, "\r\n"))
             break;
 
         p++;
     } while (1); /* stop when line is empty */
-    p += 2;
 
     content = 0;
     if (content_length > 0) {
@@ -181,13 +168,12 @@ static void do_request(client_t *cl)
     info.type = TEXT_HTML;
     info.cookie_len = -1;
 	info.ip = cl->ip;
-	info.refresh = 0;
-	info.redirect_len = 0;
-    len = getpage(&info, path, host, content, cookie, slash_pos);
+	info.redirect_len = -1;
+    len = getpage(&info, path, host, content, cookie);
     if (len < 0) {
         send(cl->sock, error[~len], error_length[~len], 0);
     } else {
-        if (info.refresh) {
+        if (info.redirect_len >= 0) {
             send(cl->sock, redirect, sizeof(redirect) - 1, 0);
             send(cl->sock, info.redirect, info.redirect_len, 0);
             send(cl->sock, "\r\n", 2, 0);
@@ -297,7 +283,6 @@ int main(void)
     cl_count[0] = 0;
     cl_count[1] = 0;
     timerevent = 0;
-    current_time = time(0);
     init();
 
     do {
@@ -378,7 +363,7 @@ int main(void)
                 }
 
                 data = realloc(cl->data, cl->dlen + len + 16);
-                /* +1 for null terminator, minimum 4 bytes allocated, +16 for safe memcmps */
+                /* +1 for null terminator, +16 for safe memcmps */
                 if(!data || recv(cl->sock, data + cl->dlen, len, 0) != len) {
                     client_free(cl);
                     continue;
@@ -393,7 +378,6 @@ int main(void)
         /* process timer event only after all other events */
         if(timerevent) {
             timerevent = 0;
-            current_time = time(0);
             time_event();
 
             list = !list;

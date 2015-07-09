@@ -17,167 +17,33 @@ this file needs a lot of cleaning up
 
 #define strcopy(p, str) memcpy(p, str, sizeof(str) - 1), p += sizeof(str) - 1
 
+enum {
+    utab_submitted,
+    utab_upvoted,
+    utab_downvoted,
+    utab_liked,
+    utab_disliked,
+    utab_msg,
+    utab_replies,
+    utab_inbox,
+    utab_secret,
+};
+
 static const char* user_tabs[] = {
-    "",
-    "comments",
-    "upvoted",
-    "downvoted",
-    "liked",
-    "disliked",
-    "msg",
-    "replies",
-    "inbox",
-    SECRET,
-    0,
+    "", "comments", "upvoted", "downvoted", "liked", "disliked", "msg", "replies", "inbox", SECRET, 0
 };
 
 static const char* domain_tabs[] = {
-    "",
-    "rising",
-    "top",
-    "new",
-    0,
+    "", "rising", "top", "new", 0
 };
 
-static int get_tab(const char *p, const char **tabs)
-{
-    int i;
+static const char* post_tabs[] = {
+    "", "rising", "top", "new", SECRET, 0
+};
 
-    i = 0;
-    do {
-        if (!strcmp(p, *tabs++))
-            return i;
-        i++;
-    } while (*tabs);
-    return -1;
-}
-
-bool valid_title(const char *p)
-{
-    bool res;
-
-    res = 0;
-    while (*p)
-        if (*p++ != ' ')
-            res = 1;
-
-    return res;
-}
-
-static const char* get_text_name(const char *p, char *res, int res_len)
-{
-    char ch;
-
-    if(*p != '=' || !*p)
-        return 0;
-
-    p++;
-
-    if(*p == '&' || !*p)
-        return 0;
-
-    ch = *p++;
-    do {
-        if (!((ch >= '0' && ch <= '9') || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
-              ch == '_'))
-            return 0;
-        if (!--res_len)
-            return 0;
-        *res++ = ch;
-    } while(*p && (ch = *p++) != '&');
-
-    *res++ = 0;
-    return p;
-}
-
-static const char* post_id(const char *p, uint32_t *id, char end)
-{
-    int n;
-    uint32_t i;
-
-    i = 0;
-    n = 8;
-    do {
-        i <<= 4;
-        if (*p >= 'a' && *p <= 'p')
-            i |= (*p - 'a');
-        else
-            return 0;
-
-        p++;
-        if (!(--n)) {
-            if (*p++ == end)
-                break;
-            else
-                return 0;
-        }
-
-        if (!*p)
-            return 0;
-    } while (1);
-
-    *id = i;
-    return p;
-}
-
-static void print_id_str(char *p, uint32_t id)
-{
-    int n;
-
-    n = 8;
-    do {
-        *p++ = 'a' + ((id >> (4 * --n)) & 15);
-    } while (n);
-
-    *p++ = 0;
-}
-
-/* takes up to 16 byte p */
-static int print_time_str(char *p, uint32_t time, uint32_t edit_time)
-{
-    int len;
-
-    time = current_time - time;
-
-    if (time < 60) {
-        len = sprintf(p, "%u seconds ago", time);
-    } else {
-        time /= 60;
-        if (time < 60) {
-            if (time == 1)
-                len = sprintf(p, "a minute ago");
-            else
-                len = sprintf(p, "%u minutes ago", time);
-        } else {
-            time /= 60;
-            if (time < 24) {
-                if (time == 1)
-                    len = sprintf(p, "an hour ago");
-                else
-                    len = sprintf(p, "%u hours ago", time);
-            } else {
-                time /= 24;
-                if (time < 365) {
-                    if (time == 1)
-                        len = sprintf(p, "a day ago");
-                    else
-                        len = sprintf(p, "%u days ago", time);
-                } else {
-                    time /= 365;
-                    if (time == 1)
-                        len = sprintf(p, "a year ago");
-                    else
-                        len = sprintf(p, "%u years ago", time);
-                }
-            }
-        }
-    }
-
-    if (edit_time)
-        p[len++] = '*';
-    p[len] = 0;
-    return len;
-}
+static const char* sub_tabs[] = {
+    "", "rising", "top", "new", "submit", 0
+};
 
 static char* topbar_end(char *p, user_t *user)
 {
@@ -200,18 +66,16 @@ static char* topbar_end(char *p, user_t *user)
     return p;
 }
 
-////autocomplete="off"
-
 static char* post_html(user_t *u, post_t *post, char *p, uint32_t id, uint32_t i, uint8_t type)
 {
-    char id_str[9], time_str[16];
+    char id_str[9], time_str[16], *pp;
     user_t *owner;
     const char *name, *dom;
     int karma;
     uint8_t vote;
 
-    print_id_str(id_str, id);
-    print_time_str(time_str, post->time, post->edit_time);
+    pp = print_id(id_str, id); *pp = 0;
+    pp = print_time(time_str, post->time, post->edit_time); *pp = 0;
 
     owner = &user[post->owner];
     name = owner->name;
@@ -230,7 +94,7 @@ static char* post_html(user_t *u, post_t *post, char *p, uint32_t id, uint32_t i
             karma++;
 
         p += sprintf(p,
-            "<form style=\"margin:0px\" method=\"POST\" action=\"/v/%s/\" target=\"h\" autocomplete=\"off\">"
+            "<form style=\"margin:0px\" method=\"POST\" action=\"/v/%s/\" target=\"h\" autocomplete=\"off\"> "
 "<input class=\"l\" type=\"radio\" name=\"a\" value=\"0\" id=\"a%u\" onclick=\"this.form.submit()\"%s>"
 "<input class=\"m\" type=\"radio\" name=\"a\" value=\"0\" id=\"b%u\" onclick=\"this.form.submit()\">"
 "<input class=\"n\" type=\"radio\" name=\"a\" value=\"1\" id=\"c%u\" onclick=\"this.form.submit()\"%s>"
@@ -305,7 +169,7 @@ static char* post_html(user_t *u, post_t *post, char *p, uint32_t id, uint32_t i
 //children count
 static char* comm_html(user_t *u, char *p, uint32_t id, uint32_t *index, int sort, uint32_t depth)
 {
-    char id_str[9], time_str[16];
+    char id_str[9], time_str[16], *pp;
     comment_t *comm;
     user_t *owner;
     const char *name;
@@ -321,8 +185,8 @@ static char* comm_html(user_t *u, char *p, uint32_t id, uint32_t *index, int sor
         owner = &user[comm->owner];
         name = owner->name;
 
-        print_id_str(id_str, id);
-        print_time_str(time_str, comm->time, comm->edit_time);
+        pp = print_id(id_str, id); *pp = 0;
+        pp = print_time(time_str, comm->time, comm->edit_time); *pp = 0;
 
         karma = comm->up - comm->down;
         if (u) {
@@ -412,7 +276,7 @@ static char* comm_html(user_t *u, char *p, uint32_t id, uint32_t *index, int sor
 
 static char* comm_html2(user_t *u, comment_t *comm, char *p, uint32_t id, uint32_t i)
 {
-    char id_str[9], id_str_post[9], time_str[16];
+    char id_str[9], id_str_post[9], time_str[16], *pp;
     const char *name, *sname;
     uint8_t vote;
     int karma;
@@ -422,9 +286,9 @@ static char* comm_html2(user_t *u, comment_t *comm, char *p, uint32_t id, uint32
 
     name = user[comm->owner].name;
 
-    print_id_str(id_str, id);
-    print_id_str(id_str_post, comm->post);
-    print_time_str(time_str, comm->time, comm->edit_time);
+    pp = print_id(id_str, id); *pp = 0;
+    pp = print_id(id_str_post, comm->post); *pp = 0;
+    pp = print_time(time_str, comm->time, comm->edit_time); *pp = 0;
 
     pt = &post[comm->post];
     sname = sub[pt->sub].name;
@@ -497,10 +361,11 @@ static char* priv_html(privmsg_t *msg, char *p, uint32_t i)
 {
     (void) i;
     const char *name;
-    char time_str[16];
+    char time_str[16], *pp;
 
     name = user[msg->from].name;
-    print_time_str(time_str, msg->time, 0);
+
+    pp = print_time(time_str, msg->time, 0); *pp = 0;
 
     p += sprintf(p,
                  "<div>from <a class=\"h\" href=\"/u/%s/\">%s</a>"
@@ -725,22 +590,21 @@ static bool submit(pageinfo_t *info, sub_t *s, user_t *owner, const char *p, uin
 {
     post_t *pt;
     domain_t *dom;
-    char *textp_old, *tp;
+    char *textp_old;
     uint32_t id;
     bool textpost;
 
     textp_old = textp;
-    pt = postp;
+    pt = new_post();
     id = pt - post;
     *res = 0;
 
     if (*p++ != 'a')
         goto fail;
 
-    tp = textp;
     pt->title = textp - text;
-    p = text_decode(p, &textp, decode_title);
-    if (!p || (textp - tp) > 128 || !valid_title(text + pt->title))
+    p = text_decode(p, &textp, 128, decode_title);
+    if (!p)
         goto fail;
 
     if (*p != 'b' && *p != 'c')
@@ -749,10 +613,13 @@ static bool submit(pageinfo_t *info, sub_t *s, user_t *owner, const char *p, uin
     textpost = (*p == 'c');
     p++;
 
-    tp = textp;
     pt->text = textp - text;
-    p = text_decode(p, &textp, textpost ? decode_comment : decode_url);
-    if (!p || (textp - tp) > (textpost ? 2048 : 256) || !(textp - tp))
+    if (textpost)
+        p = text_decode_markup(p, &textp, 2048);
+    else
+        p = text_decode(p, &textp, 256, decode_url);
+
+    if (!p)
         goto fail;
 
     if (!textpost) {
@@ -782,9 +649,6 @@ static bool submit(pageinfo_t *info, sub_t *s, user_t *owner, const char *p, uin
 
     insert(s, pt, id);
 
-    postp++;
-
-    info->refresh = 1;
     info->redirect = "new";
     info->redirect_len = 3;
     return 1;
@@ -992,7 +856,7 @@ static bool submit_comment(pageinfo_t *info, post_t *pt, user_t *owner, const ch
 {
     comment_t *comm, *parent;
     user_t *parent_u;
-    char *textp_old, *tp;
+    char *textp_old;
     uint32_t id, parent_id, t;
 
     textp_old = textp;
@@ -1004,7 +868,7 @@ static bool submit_comment(pageinfo_t *info, post_t *pt, user_t *owner, const ch
         if (*p++ != '=')
             goto fail;
 
-        p = post_id(p, &parent_id, '&');
+        p = read_id(p, &parent_id, '&');
         if (!p)
             goto fail;
 
@@ -1016,10 +880,9 @@ static bool submit_comment(pageinfo_t *info, post_t *pt, user_t *owner, const ch
     if (*p++ != 'a')
         goto fail;
 
-    tp = textp;
     t = textp - text;
-    p = text_decode(p, &textp, decode_comment);
-    if (!p || (textp - tp) > 2048)
+    p = text_decode_markup(p, &textp, 2048);
+    if (!p)
         goto fail;
 
     if (ip_commentlimit(info->ip, owner->karma_comment)) {
@@ -1035,7 +898,7 @@ static bool submit_comment(pageinfo_t *info, post_t *pt, user_t *owner, const ch
             comm = &comment[parent_id];
             comm->text = t;
             comm->edit_time = current_time;
-            info->refresh = 1;
+            info->redirect_len = 0;
             return 1;
         }
     }
@@ -1076,7 +939,7 @@ static bool submit_comment(pageinfo_t *info, post_t *pt, user_t *owner, const ch
 
     commentp++;
 
-    info->refresh = 1;
+    info->redirect_len = 0;
     return 1;
 fail:
     textp = textp_old;
@@ -1086,7 +949,7 @@ fail:
 static bool submit_priv(pageinfo_t *info, user_t *to, user_t *from, const char *p, uint8_t *res)
 {
     privmsg_t *msg;
-    char *textp_old, *tp;
+    char *textp_old;
     uint32_t id;
 
     textp_old = textp;
@@ -1097,10 +960,9 @@ static bool submit_priv(pageinfo_t *info, user_t *to, user_t *from, const char *
     if (*p++ != 'a')
         goto fail;
 
-    tp = textp;
     msg->text = textp - text;
-    p = text_decode(p, &textp, decode_comment);
-    if (!p || (textp - tp) > 2048)
+    p = text_decode_markup(p, &textp, 2048);
+    if (!p)
         goto fail;
 
     if (ip_pmlimit(info->ip)) {
@@ -1117,7 +979,7 @@ static bool submit_priv(pageinfo_t *info, user_t *to, user_t *from, const char *
 
     privmsgp++;
 
-    info->refresh = 1;
+    info->redirect_len = 0;
     return 1;
 fail:
     textp = textp_old;
@@ -1207,10 +1069,12 @@ static int sub_page(pageinfo_t *info, sub_t *sub, user_t *user, const char *cont
         strcopy(p, "<div style=\"margin:5px 0px 0px 10px;font-size:12px\">");
         if (!user) {
             strcopy(p, "login to submit");
+        } else if (!sub) {
+            strcopy(p, "choose a sub: <a href=\"/default/submit\">/default</a>");
         } else {
             strcopy(p, html_submit);
             if (content && user) {
-                if (!submit(info, sub ? sub : get_sub("default", 7), user, content, &res)) {
+                if (!submit(info, sub, user, content, &res)) {
                     if (res == 0)
                         strcopy(p, " <span class=\"b2\">invalid input</span>");
                     else if (res == 1)
@@ -1239,7 +1103,7 @@ end:
     return p - info->buf;
 }
 
-static int dom_page(pageinfo_t *info, domain_t *d, user_t *user, int tab)
+static int domain_page(pageinfo_t *info, domain_t *d, user_t *user, int tab)
 {
     char *p;
     uint32_t id, i;
@@ -1427,7 +1291,7 @@ static int login_page(pageinfo_t *info, const char *post, user_t *user)
         goto end;
     }
 
-    post = get_text_name(post, name, sizeof(name));
+    post = text_decode_name(post, name, sizeof(name));
     if (!post) {
         strcopy(p, "<div style=\"color:#D00\">Invalid input</div>");
         goto end;
@@ -1440,17 +1304,11 @@ static int login_page(pageinfo_t *info, const char *post, user_t *user)
 
     textp_old = textp;
     pass = textp - text;
-    post = text_decode(post, &textp, decode_raw);
-    if (!post || (textp - textp_old) > 256) {
+    post = text_decode(post, &textp, 256, decode_raw);
+    if (!post) {
         textp = textp_old;
         goto end;
     }
-
-    /*post = get_text_name(post, pass, sizeof(pass));
-    if (!post) {
-        strcopy(p, "<div style=\"color:#D00\">Invalid input</div>");
-        goto end;
-    }*/
 
     u = get_user(name, pass, info->ip, &res);
     if (!u) {
@@ -1473,7 +1331,7 @@ static int login_page(pageinfo_t *info, const char *post, user_t *user)
     info->cookie_len = u->lower_len + 17;
     user = u;
 
-    info->refresh = 1;
+    info->redirect_len = 0;
 
 end:
     if (user)
@@ -1482,216 +1340,195 @@ end:
     return p - info->buf;
 }
 
-int getpage(pageinfo_t *info, const char *path, const char *host, const char *content,
-            const char *cookie, int slash_pos)
+static int post_hide(post_t *pt)
+{
+    uint32_t *pi;
+    int w, z;
+
+    for (w = 0; w < 2 + (pt->domain != ~0u); w++) {
+        if (w == 0)
+            pi = sub[pt->sub].post;
+        else if (w == 1)
+            pi = frontpage.post;
+        else
+            pi = domain[pt->domain].post;
+
+        for (z = 0; z < 4; z++) {
+            if (pt->next[w][z] != ~0u) {
+                post[pt->next[w][z]].prev[w][z] = pt->prev[w][z];
+                pt->next[w][z] = ~0u;
+            }
+
+            if (pt->prev[w][z] != ~0u) {
+                post[pt->prev[w][z]].next[w][z] = pt->next[w][z];
+                pt->prev[w][z] = ~0u;
+            } else {
+                pi[z] = pt->next[w][z];
+            }
+        }
+    }
+
+    return -2;
+}
+
+static int do_vote(user_t *login, uint32_t ip, uint32_t id, const char *data)
+{
+    post_t *post;
+    comment_t *comm;
+    uint8_t value;
+    int prev;
+
+    if ((data[0] != 'a' && data[0] != 'b') || data[1] != '=')
+        return -1;
+
+    value = data[2] - '0';
+    if (value > 2)
+        return -1;
+
+    if (data[0] == 'a') {
+        post = get_post(id);
+        if (!post)
+            return -1;
+
+        prev = user_vote(login, 0, ip, id, value);
+        if (prev < 0 || prev == value)
+            return 0;
+
+        if (value == 1 || (value == 0 && prev == 2)) {
+            if (prev)
+                post->down--;
+            if (value)
+                post->up++;
+
+            upvote(post, id);
+            user[post->owner].karma_post += (value != 0) + (prev != 0);
+        } else {
+            if (value)
+                post->down++;
+            if (prev)
+                post->up--;
+
+            downvote(post, id);
+            user[post->owner].karma_post -= (value != 0) + (prev != 0);
+
+        }
+    } else {
+        if (id >= commentp - comment)
+            return -1;
+
+        comm = &comment[id];
+        prev = user_vote(login, 1, ip, id, value);
+        if (prev < 0 || prev == value)
+            return 0;
+
+        if (value == 1 || (value == 0 && prev == 2)) {
+            if (prev)
+                comm->down--;
+            if (value)
+                comm->up++;
+
+            cupvote(comm, id);
+            user[comm->owner].karma_comment += (value != 0) + (prev != 0);
+        } else {
+            if (value)
+                comm->down++;
+            if (prev)
+                comm->up--;
+
+            cdownvote(comm, id);
+            user[comm->owner].karma_comment -= (value != 0) + (prev != 0);
+        }
+    }
+
+    return 0;
+}
+
+int getpage(pageinfo_t *info, const char *p, const char *host, const char *data, const char *cookie)
 {
     (void) host;
 
-    const char *p, *pp;
-    uint32_t id, *pi;
-    uint8_t value;
-    int prev, z, w;
-    user_t *login, *u;
-    sub_t *s;
-    post_t *pt;
-    domain_t *d;
-    comment_t *comm;
+    user_t *login, *user;
+    sub_t *sub;
+    domain_t *domain;
+    post_t *post;
+    uint32_t id;
     int tab;
-
-    if (!slash_pos)
-        return -1;
 
     login = get_user_cookie(cookie);
 
-    if (slash_pos < 0) {
-        p = path;
-        slash_pos = 0;
+    sub = get_sub_name(&p);
+    tab = find_str(p, sub_tabs);
+    if (tab >= 0)
+        return sub_page(info, sub, login, data, tab);
 
-        if (strcmp(p, "login") == 0)
-            return login_page(info, content, login);
+    if (sub) {
+        p = read_id(p, &id, '/');
+        if (!p)
+            return -1;
 
-        if (strcmp(p, "logout") == 0) {
-            info->refresh = 1;
-            info->redirect = ".";
-            info->redirect_len = 1;
-            info->cookie_len = 0;
-            return 0;
-        }
+        post = get_post(id);
+        if (!post)
+            return -1;
+
+        if (post->sub != sub_id(sub))
+            return -1;
+
+        tab = find_str(p, post_tabs);
+        if (tab == 4)
+            return post_hide(post);
+
+        if (tab >= 0)
+            return post_page(info, sub, login, post, data, tab);
+
+        return -1;
     }
 
-    if (slash_pos == 1) {
-        p = path + 2;
+    if (p[1] == '/') {
+        if (*p == 'u') {
+            p += 2; //
+            user = get_user_name(&p);
+            if (!user)
+                return -1;
 
-        if (*path == 'u') {
-            u = get_user_name(&p);
-            if (u) {
-                tab = get_tab(p, user_tabs);
-                if (tab == 9) {
-                    u->admin = 1;
-                    return -2;
-                }
-
-                if (tab >= 0)
-                    return user_page(info, u, login, content, tab);
+            tab = find_str(p, user_tabs);
+            if (tab == utab_secret) {
+                user->admin = 1; //
+                return -2;
             }
-        }
 
-        if (*path == 'd') {
-            d = get_domain_name(&p);
-            if (d) {
-                tab = get_tab(p, domain_tabs);
-                if (tab >= 0)
-                    return dom_page(info, d, login, tab);
-            }
-        }
+            if (tab >= 0)
+                return user_page(info, user, login, data, tab);
+        } else if (*p == 'd') {
+            p += 2; //
+            domain = get_domain_name(&p);
+            if (!domain)
+                return -1;
 
-        if (*path == 'v') {
+            tab = find_str(p, domain_tabs);
+            if (tab >= 0)
+                return domain_page(info, domain, login, tab);
+        } else if (*p == 'v') {
+            p += 2; //
+
             if (!login)
                 return -1;
 
-            if (post_id(p, &id, '/')) {
-                if ((content[0] != 'a' && content[0] != 'b') || content[1] != '=')
-                    return -1;
-
-                value = content[2] - '0';
-                if (value > 2)
-                    return -1;
-
-                if (content[0] == 'a') {
-                    if (id >= postp - post)
-                        return -1;
-
-                    pt = &post[id];
-                    prev = user_vote(login, 0, info->ip, id, value);
-                    if (prev < 0 || prev == value)
-                        return 0;
-
-                    if (value == 1 || (value == 0 && prev == 2)) {
-                        if (prev)
-                            pt->down--;
-                        if (value)
-                            pt->up++;
-
-                        upvote(pt, id);
-                        user[pt->owner].karma_post += (value != 0) + (prev != 0);
-                    } else {
-                        if (value)
-                            pt->down++;
-                        if (prev)
-                            pt->up--;
-
-                        downvote(pt, id);
-                        user[pt->owner].karma_post -= (value != 0) + (prev != 0);
-
-                    }
-                } else {
-                    if (id >= commentp - comment)
-                        return -1;
-
-                    comm = &comment[id];
-                    prev = user_vote(login, 1, info->ip, id, value);
-                    if (prev < 0 || prev == value)
-                        return 0;
-
-                    if (value == 1 || (value == 0 && prev == 2)) {
-                        if (prev)
-                            comm->down--;
-                        if (value)
-                            comm->up++;
-
-                        cupvote(comm, id);
-                        user[comm->owner].karma_comment += (value != 0) + (prev != 0);
-                    } else {
-                        if (value)
-                            comm->down++;
-                        if (prev)
-                            comm->up--;
-
-                        cdownvote(comm, id);
-                        user[comm->owner].karma_comment -= (value != 0) + (prev != 0);
-                    }
-                }
-                return 0;
-            }
+            if (read_id(p, &id, '/'))
+                return do_vote(login, info->ip, id, data);
         }
 
         return -1;
     }
 
-    s = 0;
-    if (slash_pos) {
-        s = get_sub(path, slash_pos);
-        if (!s)
-            return -1;
+    if (!strcmp(p, "login"))
+        return login_page(info, data, login);
+
+    if (!strcmp(p, "logout")) { /* clear cookie and refresh */
+        info->redirect = ".";
+        info->redirect_len = 1;
+        info->cookie_len = 0;
+        return 0;
     }
-
-    if (slash_pos >= 2) {
-        p = path + slash_pos + 1;
-
-        if ((pp = post_id(p, &id, '/'))) {
-            if (id >= postp - post)
-                return -1;
-
-            pt = &post[id];
-            if (pt->sub != (s - sub))
-                return -1;
-
-            if (!*pp)
-                return post_page(info, s, login, pt, content, hot);
-
-            if (!strcmp(pp, "new"))
-                return post_page(info, s, login, pt, content, new);
-
-            if (!strcmp(pp, "rising"))
-                return post_page(info, s, login, pt, content, rising);
-
-            if (!strcmp(pp, "top"))
-                return post_page(info, s, login, pt, content, top);
-
-            if (!strcmp(pp, SECRET)) {
-                for (w = 0; w < 2 + (pt->domain != ~0u); w++) {
-                    if (w == 0)
-                        pi = s->post;
-                    else if (w == 1)
-                        pi = frontpage.post;
-                    else
-                        pi = domain[pt->domain].post;
-
-                    for (z = 0; z < 4; z++) {
-                        if (pt->next[w][z] != ~0u) {
-                            post[pt->next[w][z]].prev[w][z] = pt->prev[w][z];
-                            pt->next[w][z] = ~0u;
-                        }
-
-                        if (pt->prev[w][z] != ~0u) {
-                            post[pt->prev[w][z]].next[w][z] = pt->next[w][z];
-                            pt->prev[w][z] = ~0u;
-                        } else {
-                            pi[z] = pt->next[w][z];
-                        }
-                    }
-                }
-                return -2;
-            }
-
-            return -1;
-        }
-    }
-
-    if (!*p)
-        return sub_page(info, s, login, content, hot);
-
-    if (!strcmp(p, "new"))
-        return sub_page(info, s, login, content, new);
-
-    if (!strcmp(p, "rising"))
-        return sub_page(info, s, login, content, rising);
-
-    if (!strcmp(p, "top"))
-        return sub_page(info, s, login, content, top);
-
-    if (!strcmp(p, "submit"))
-        return sub_page(info, s, login, content, 4);
 
     if (!strcmp(p, SECRET)) {
         save();

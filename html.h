@@ -51,6 +51,12 @@ const char html_head[] =
 ".x:checked~.w{display:none}"
 ".x:checked~.z,.x1:checked~.y2,.x2:checked~.y1{display:inline}"
 
+"p{margin:0}"
+"p{display:inline}"
+"p{font-family:monospace}"
+"q:before,q:after{content:none}"
+"q{text-decoration:overline}"
+
 "</style>"
 ;
 

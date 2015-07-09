@@ -69,8 +69,8 @@ user_t user[1024 * 256];
 vote_t vote[1024 * 1024 * 4];
 sub_t sub[1024 * 8];
 domain_t domain[1024 * 8];
+post_t post[1024 * 1024];
 
-post_t post[1024 * 1024], *postp;
 comment_t comment[1024 * 1024], *commentp;
 privmsg_t privmsg[1024 * 1024], *privmsgp;
 
@@ -94,10 +94,15 @@ bool ip_postlimit(uint32_t ip, int karma);
 bool ip_commentlimit(uint32_t ip, int karma);
 bool ip_pmlimit(uint32_t ip);
 
-sub_t* get_sub(const char *name, uint32_t name_len);
+sub_t* get_sub_name(const char **p);
+//sub_t* get_sub(uint32_t id);
+uint32_t sub_id(sub_t *s);
 
 domain_t* get_domain(const char *str, uint8_t *res);
 domain_t* get_domain_name(const char **p);
+
+post_t* new_post(void);
+post_t* get_post(uint32_t id);
 
 void time_event(void);
 void init(void);

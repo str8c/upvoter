@@ -26,7 +26,7 @@ typedef struct {
 static uint32_t user_table[38 * 38 * 38 * 38];
 static uint32_t sub_table[38 * 38 * 38 * 38];
 static uint32_t domain_table[38 * 38 * 38 * 38];
-static uint32_t nuser, nsub, ndomain, nvote;
+static uint32_t nuser, nsub, ndomain, nvote, npost;
 
 static iptable_t iptable;
 
@@ -57,6 +57,8 @@ static ipentry_t* ip_find(iptable_t *table, uint32_t ip)
         (entry - 1)->next = 1;
     } else {
         entry = table->entry[low] = malloc(sizeof(*entry));
+        if (!entry)
+            return 0;
     }
 
     entry->ip = high;
@@ -68,11 +70,13 @@ static ipentry_t* ip_find(iptable_t *table, uint32_t ip)
 static void ip_clear(iptable_t *table)
 {
     ipentry_t **p;
+    int n;
 
-    for (p = table->entry; p != (void*)table->entry + sizeof(table->entry); p++) {
-        free(*p);
-        *p = 0;
-    }
+    n = 65536;
+    p = table->entry;
+    do {
+        free(*p); *p = 0;
+    } while (p++, --n);
 }
 
 static uint32_t domain_name(char *p, uint32_t len, const char *str, uint8_t *res)
@@ -389,15 +393,14 @@ bool ip_pmlimit(uint32_t ip)
     return 0;
 }
 
-sub_t* get_sub(const char *name, uint32_t name_len)
+sub_t* get_sub_name(const char **p)
 {
+    const char *name;
     uint32_t hash, id;
     sub_t *s;
 
-    if (name_len >= sizeof(s->name))
-        return 0;
-
-    hash = hash_sub(name);
+    name = *p;
+    hash = hash_sub(p, sizeof(s->name));
     if (!hash)
         return 0;
 
@@ -406,7 +409,7 @@ sub_t* get_sub(const char *name, uint32_t name_len)
     if (id != ~0u) {
         do {
             s = &sub[id];
-            if (!strcmp(s->name, name))
+            if (strcmp_slash(s->name, name))
                 return s;
 
             id = s->next;
@@ -421,10 +424,19 @@ sub_t* get_sub(const char *name, uint32_t name_len)
 
     s = &sub[id];
     s->next = ~0u;
-    strcpy(s->name, name);
+    memcpy(s->name, name, *p - name - 1);
     memset(s->post, 0xFF, sizeof(s->post));
-
     return s;
+}
+
+/* sub_t* get_sub(uint32_t id)
+{
+    return &sub[id];
+} */
+
+uint32_t sub_id(sub_t *s)
+{
+    return (s - sub);
 }
 
 domain_t* get_domain(const char *str, uint8_t *res)
@@ -491,11 +503,26 @@ domain_t* get_domain_name(const char **p)
     return 0;
 }
 
+post_t* new_post(void)
+{
+    return &post[npost++];
+}
+
+post_t* get_post(uint32_t id)
+{
+    if (id >= npost)
+        return 0;
+
+    return &post[id];
+}
+
 void time_event(void)
 {
+    current_time = time(0);
     if (current_time - last_clear >= 300u) {
         last_clear = current_time;
         ip_clear(&iptable);
+        save();
     }
 }
 
@@ -547,13 +574,14 @@ void init(void)
 
     uint32_t len, n;
 
+    current_time = time(0);
     last_clear = current_time;
 
     loadfile(user, nuser);
     loadfile(vote, nvote);
     loadfile(sub, nsub);
     loadfile(domain, ndomain);
-    loadfile(post, n); postp = post + n;
+    loadfile(post, npost);
     loadfile(comment, n); commentp = comment + n;
     loadfile(privmsg, n); privmsgp = privmsg + n;
     loadfile(text, n); textp = text + n;
@@ -570,7 +598,7 @@ void save(void)
     savefile(vote, nvote);
     savefile(sub, nsub);
     savefile(domain, ndomain);
-    savefile(post, postp - post);
+    savefile(post, npost);
     savefile(comment, commentp - comment);
     savefile(privmsg, privmsgp - privmsg);
     savefile(text, textp - text);
