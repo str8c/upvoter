@@ -19,6 +19,7 @@ this file needs a lot of cleaning up
 
 enum {
     utab_submitted,
+    utab_comments,
     utab_upvoted,
     utab_downvoted,
     utab_liked,
