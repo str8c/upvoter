@@ -91,7 +91,7 @@ static void client_free(client_t *cl)
 static void do_request(client_t *cl)
 {
     int len, res, content_length;
-    char *p, *path, *host, *cookie, *content;
+    char *p, *path, *host, *cookie, *real_ip, *content;
     bool post;
 
     cl->data[cl->dlen] = 0; /* work in null-terminated space */
@@ -118,6 +118,7 @@ static void do_request(client_t *cl)
     /* parse rest of header */
     host = 0;
     cookie = 0;
+    real_ip = 0;
     content_length = -1;
     do {
         /* go to start of next line*/
@@ -140,8 +141,14 @@ static void do_request(client_t *cl)
         }
 
         /* content-length */
-        if(cmp(&p, "Content-Length: ")) {
+        if (cmp(&p, "Content-Length: ")) {
             content_length = strtoul(p, &p, 0);
+            continue;
+        }
+
+        /* real-ip */
+        if (cmp(&p, "X-Real-IP: ")) {
+            real_ip = p;
             continue;
         }
 
@@ -163,11 +170,14 @@ static void do_request(client_t *cl)
             return;
     }
 
+    info.ip = cl->ip;
+    if ((info.ip & 0xFF) == 0x7F && real_ip)
+        inet_pton(AF_INET, real_ip, &info.ip);
+
     /* respond */
     info.data = NULL;
     info.type = TEXT_HTML;
     info.cookie_len = -1;
-	info.ip = cl->ip;
 	info.redirect_len = -1;
     len = getpage(&info, path, host, content, cookie);
     if (len < 0) {
