@@ -1042,7 +1042,8 @@ static int post_page(pageinfo_t *info, sub_t *sub, user_t *u, post_t *pt, const 
     return p - info->buf;
 }
 
-static int sub_page(pageinfo_t *info, sub_t *sub, user_t *user, const char *content, int tab)
+static int sub_page(pageinfo_t *info, sub_t *sub, user_t *user, const char *content, int tab,
+                    uint32_t page)
 {
     char *p;
     uint32_t id, i;
@@ -1093,9 +1094,11 @@ static int sub_page(pageinfo_t *info, sub_t *sub, user_t *user, const char *cont
 
     id = sub ? sub->post[tab] : frontpage.post[tab];
     i = 0;
-    while (id != ~0u && i < 25) {
+    while (id != ~0u && i < 25 * (page + 1)) {
         pt = &post[id];
-        p = post_html(user, pt, p, id, i++, sub == 0);
+        if (i >= 25 * page)
+            p = post_html(user, pt, p, id, i, sub == 0);
+        i++;
         id = pt->next[!sub][tab];
     }
 
@@ -1104,7 +1107,7 @@ end:
     return p - info->buf;
 }
 
-static int domain_page(pageinfo_t *info, domain_t *d, user_t *user, int tab)
+static int domain_page(pageinfo_t *info, domain_t *d, user_t *user, int tab, uint32_t page)
 {
     char *p;
     uint32_t id, i;
@@ -1128,9 +1131,12 @@ static int domain_page(pageinfo_t *info, domain_t *d, user_t *user, int tab)
 
     id = d->post[tab];
     i = 0;
-    while (id != ~0u && i < 25) {
+    while (id != ~0u && i < 25 * (page + 1)) {
         pt = &post[id];
-        p = post_html(user, pt, p, id, i++, 1);
+        if (i >= 25 * page)
+            p = post_html(user, pt, p, id, i, 1);
+
+        i++;
         id = pt->next[2][tab];
     }
 
@@ -1138,7 +1144,8 @@ static int domain_page(pageinfo_t *info, domain_t *d, user_t *user, int tab)
     return p - info->buf;
 }
 
-static int user_page(pageinfo_t *info, user_t *u, user_t *login, const char *content, int tab)
+static int user_page(pageinfo_t *info, user_t *u, user_t *login, const char *content, int tab,
+                     uint32_t page)
 {
     char *p;
     uint32_t id, i;
@@ -1196,38 +1203,46 @@ static int user_page(pageinfo_t *info, user_t *u, user_t *login, const char *con
     i = 0;
     if (tab == 0) {
         id = u->new;
-        while (id != ~0u && i < 25) {
+        while (id != ~0u && i < 25 * (page + 1)) {
             pt = &post[id];
-            p = post_html(login, pt, p, id, i++, 1);
+            if (i >= 25 * page)
+                p = post_html(login, pt, p, id, i, 1);
+            i++;
             id = pt->nextu;
         }
     } if (tab == 1) {
         strcopy(p, "<div style=\"margin:5px 0px 0px 10px;font-size:12px\">");
         id = u->new_comment;
-        while (id != ~0u && i < 25) {
+        while (id != ~0u && i < 25 * (page + 1)) {
             comm = &comment[id];
-            p = comm_html2(login, comm, p, id, i++);
+            if (i >= 25 * page)
+                p = comm_html2(login, comm, p, id, i);
+            i++;
             id = comm->nextu;
         }
         strcopy(p, "</div>");
     } else if (tab <= 3) {
         id = u->new_vote[0];
-        while (id != ~0u && i < 25) {
+        while (id != ~0u && i < 25 * (page + 1)) {
             v = &vote[id];
             if (v->value == tab - 1) {
                 pt = &post[v->id];
-                p = post_html(login, pt, p, v->id, i++, 1);
+                if (i >= 25 * page)
+                    p = post_html(login, pt, p, v->id, i, 1);
+                i++;
             }
             id = v->nextu;
         }
     } else if (tab <= 5) {
         strcopy(p, "<div style=\"margin:5px 0px 0px 10px;font-size:12px\">");
         id = u->new_vote[1];
-        while (id != ~0u && i < 25) {
+        while (id != ~0u && i < 25 * (page + 1)) {
             v = &vote[id];
             if (v->value == tab - 3) {
                 comm = &comment[v->id];
-                p = comm_html2(login, comm, p, v->id, i++);
+                if (i >= 25 * page)
+                    p = comm_html2(login, comm, p, v->id, i);
+                i++;
             }
             id = v->nextu;
         }
@@ -1251,18 +1266,22 @@ static int user_page(pageinfo_t *info, user_t *u, user_t *login, const char *con
     } else if (tab == 7) {
         strcopy(p, "<div style=\"margin:5px 0px 0px 10px;font-size:12px\">");
         id = u->new_reply;
-        while (id != ~0u && i < 25) {
+        while (id != ~0u && i < 25 * (page + 1)) {
             comm = &comment[id];
-            p = comm_html2(login, comm, p, id, i++);
+            if (i >= 25 * page)
+                p = comm_html2(login, comm, p, id, i);
+            i++;
             id = comm->nexti;
         }
         strcopy(p, "</div>");
     } else {
         strcopy(p, "<div style=\"margin:5px 0px 0px 10px;font-size:12px\">");
         id = u->new_priv;
-        while (id != ~0u && i < 25) {
+        while (id != ~0u && i < 25 * (page + 1)) {
             pm = &privmsg[id];
-            p = priv_html(pm, p, i++);
+            if (i >= 25 * page)
+                p = priv_html(pm, p, i);
+            i++;
             id = pm->next;
         }
         strcopy(p, "</div>");
@@ -1444,7 +1463,8 @@ static int do_vote(user_t *login, uint32_t ip, uint32_t id, const char *data)
     return 0;
 }
 
-int getpage(pageinfo_t *info, const char *p, const char *host, const char *data, const char *cookie)
+int getpage(pageinfo_t *info, const char *p, const char *get, const char *host, const char *data,
+            const char *cookie)
 {
     (void) host;
 
@@ -1453,14 +1473,19 @@ int getpage(pageinfo_t *info, const char *p, const char *host, const char *data,
     domain_t *domain;
     post_t *post;
     uint32_t id;
-    int tab;
+    int tab, page;
+
+    page = 0;
+    if (get)
+        if (!memcmp(get, "page=", 5) && get[5] >= '0' && get[5] <= '9')
+            page = get[5] - '0';
 
     login = get_user_cookie(cookie);
 
     sub = get_sub_name(&p);
     tab = find_str(p, sub_tabs);
     if (tab >= 0)
-        return sub_page(info, sub, login, data, tab);
+        return sub_page(info, sub, login, data, tab, page);
 
     if (sub) {
         p = read_id(p, &id, '/');
@@ -1498,7 +1523,7 @@ int getpage(pageinfo_t *info, const char *p, const char *host, const char *data,
             }
 
             if (tab >= 0)
-                return user_page(info, user, login, data, tab);
+                return user_page(info, user, login, data, tab, page);
         } else if (*p == 'd') {
             p += 2; //
             domain = get_domain_name(&p);
@@ -1507,7 +1532,7 @@ int getpage(pageinfo_t *info, const char *p, const char *host, const char *data,
 
             tab = find_str(p, domain_tabs);
             if (tab >= 0)
-                return domain_page(info, domain, login, tab);
+                return domain_page(info, domain, login, tab, page);
         } else if (*p == 'v') {
             p += 2; //
 
@@ -1533,7 +1558,7 @@ int getpage(pageinfo_t *info, const char *p, const char *host, const char *data,
 
     if (!strcmp(p, SECRET)) {
         save();
-        return -2;
+        exit(0);
     }
 
     return -1;

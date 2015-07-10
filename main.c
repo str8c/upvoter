@@ -19,7 +19,8 @@
 #include <errno.h>
 
 /* functions to call */
-int getpage(pageinfo_t *info, const char *path, const char *host, const char *data, const char *cookie);
+int getpage(pageinfo_t *info, const char *p, const char *get, const char *host, const char *data,
+            const char *cookie);
 void time_event(void);
 void init(void);
 
@@ -91,7 +92,7 @@ static void client_free(client_t *cl)
 static void do_request(client_t *cl)
 {
     int len, res, content_length;
-    char *p, *path, *host, *cookie, *real_ip, *content;
+    char *p, *path, *get, *host, *cookie, *real_ip, *content;
     bool post;
 
     cl->data[cl->dlen] = 0; /* work in null-terminated space */
@@ -110,9 +111,13 @@ static void do_request(client_t *cl)
 
     /* parse requested path */
     path = p;
-    for (; *p != ' '; p++)
+    get = 0;
+    for (; *p != ' '; p++) {
         if (!*p)
             goto invalid;
+        if (*p == '?')
+            *p = 0, get = p + 1;
+    }
     *p++ = 0; /* null-terminate the path */
 
     /* parse rest of header */
@@ -179,7 +184,7 @@ static void do_request(client_t *cl)
     info.type = TEXT_HTML;
     info.cookie_len = -1;
 	info.redirect_len = -1;
-    len = getpage(&info, path, host, content, cookie);
+    len = getpage(&info, path, get, host, content, cookie);
     if (len < 0) {
         send(cl->sock, error[~len], error_length[~len], 0);
     } else {
