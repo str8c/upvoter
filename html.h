@@ -56,7 +56,10 @@ const char html_head[] =
 "p{font-family:monospace}"
 "q:before,q:after{content:none}"
 "q{text-decoration:overline}"
-
+"tt{font-family:inherit}"
+"tt{color:#000}"
+"tt{background:#000}"
+"tt:hover{color:#FFF}"
 "</style>"
 ;
 

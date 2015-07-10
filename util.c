@@ -309,10 +309,11 @@ const char* text_decode(const char *p, char **textp, int maxlength, int level)
 }
 
 static const char* markup_tags[] = {
-    "b", "i", "p", "sub", "sup", "q", "s", "u",
+    "b", "i", "p", "sub", "sup", "q", "s", "u", "tt"
 };
 
-static const char markup_ch[] = "*/`#^~-_";
+static const char markup_ch[] = "*;`#^~-_$";
+#define nmarkup 9
 
 const char* text_decode_markup(const char *p, char **textp, int maxlength)
 {
@@ -320,7 +321,7 @@ const char* text_decode_markup(const char *p, char **textp, int maxlength)
     int h1, h2;
     uint32_t i;
     char *tp, *lp, *s;
-    bool prev_lb, prev_ws, url, open_url, open_tag[8];
+    bool prev_lb, prev_ws, url, open_url, open_tag[nmarkup];
 
     tp = *textp;
 
