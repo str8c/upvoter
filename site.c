@@ -62,7 +62,7 @@ static char* topbar_end(char *p, user_t *user)
     } else {
         strcopy(p, "<a class=\"b1\" href=\"/login\">login</a>");
     }
-    strcopy(p, "</span></div><table>");
+    strcopy(p, "</span></div>");
 
     return p;
 }
@@ -83,7 +83,7 @@ static char* post_html(user_t *u, post_t *post, char *p, uint32_t id, uint32_t i
     karma = post->up - post->down;
 
 
-    strcopy(p, "<tr><td class=\"v\">");
+    strcopy(p, "<div class=\"u\">");
 
     const char *ck = " checked";
 
@@ -95,7 +95,7 @@ static char* post_html(user_t *u, post_t *post, char *p, uint32_t id, uint32_t i
             karma++;
 
         p += sprintf(p,
-            "<form style=\"margin:0px\" method=\"POST\" action=\"/v/%s/\" target=\"h\" autocomplete=\"off\"> "
+            "<div><form style=\"margin:0px\" method=\"POST\" action=\"/v/%s/\" target=\"h\" autocomplete=\"off\"> "
 "<input class=\"l\" type=\"radio\" name=\"a\" value=\"0\" id=\"a%u\" onclick=\"this.form.submit()\"%s>"
 "<input class=\"m\" type=\"radio\" name=\"a\" value=\"0\" id=\"b%u\" onclick=\"this.form.submit()\">"
 "<input class=\"n\" type=\"radio\" name=\"a\" value=\"1\" id=\"c%u\" onclick=\"this.form.submit()\"%s>"
@@ -104,15 +104,16 @@ static char* post_html(user_t *u, post_t *post, char *p, uint32_t id, uint32_t i
             "<label class=\"p\" for=\"c%u\"></label><label class=\"r\" for=\"a%u\"></label><br>"
             "<span class=\"t\">%i</span><span class=\"r1\">%i</span><span class=\"s1\">%i</span><br>"
             "<label class=\"q\" for=\"d%u\"></label><label class=\"s\" for=\"b%u\"></label><br>"
-            "</form></td>",
+            "</form></div>",
             id_str, i, vote == 0 ? ck : "", i, i, vote == 1 ? ck : "", i, vote == 2 ? ck : "",
             i, i, karma, karma + 1, karma - 1, i, i
         );
     } else {
         p += sprintf(p,
-            "<input class=\"l\" type=\"radio\" checked>"
-            "<span class=\"p\"></span><span class=\"r\"></span><br><span class=\"t\">%i</span><br>"
-            "<span class=\"q\"></span><span class=\"s\"></span><br></td>",
+            "<div><input class=\"l\" type=\"radio\" checked>"
+            "<span class=\"p\"></span><br>"
+            "<span class=\"t\">%i</span><br>"
+            "<span class=\"q\"></span><br></div>",
             karma);
     }
 
@@ -121,7 +122,7 @@ static char* post_html(user_t *u, post_t *post, char *p, uint32_t id, uint32_t i
             dom = domain[post->domain].name;
 
     p += sprintf(p,
-        "<td class=\"u\">"
+        "<div>"
         "<a href=\"%s%s\">%s</a> "
         "<span class=\"c\">(<a class=\"b\" href=\"/d/%s/\">%s</a>)</span><br>",
 
@@ -130,7 +131,7 @@ static char* post_html(user_t *u, post_t *post, char *p, uint32_t id, uint32_t i
     );
     } else {
     p += sprintf(p,
-        "<td class=\"u\">"
+        "<div>"
         "<a href=\"/%s/%s/\">%s</a> "
         "<span class=\"c\">(<a class=\"b\" href=\"/%s/\">self.%s</a>)</span><br>"
         "<input class=\"x\" type=\"checkbox\" id=\"s%u\" autocomplete=\"off\"%s>"
@@ -162,7 +163,7 @@ static char* post_html(user_t *u, post_t *post, char *p, uint32_t id, uint32_t i
         p += sprintf(p, "<div class=\"w\">%s</div>", text + post->text);
     }
 
-    strcopy(p, "</td></tr>");
+    strcopy(p, "</div></div>");
 
     return p;
 }
@@ -1008,7 +1009,7 @@ static int post_page(pageinfo_t *info, sub_t *sub, user_t *u, post_t *pt, const 
 
     p = post_html(u, pt, p, (pt - post), 0, 2);
 
-    strcopy(p, "</table><div style=\"margin:5px 0px 0px 10px;font-size:12px\">");
+    strcopy(p, "<div style=\"margin:5px 0px 0px 10px;font-size:12px\">");
 
     if (content && u) {
         if (!submit_comment(info, pt, u, content, &res)) {
