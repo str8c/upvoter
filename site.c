@@ -1374,17 +1374,16 @@ static int post_hide(post_t *pt)
             pi = domain[pt->domain].post;
 
         for (z = 0; z < 4; z++) {
-            if (pt->next[w][z] != ~0u) {
+            if (pt->next[w][z] != ~0u)
                 post[pt->next[w][z]].prev[w][z] = pt->prev[w][z];
-                pt->next[w][z] = ~0u;
-            }
 
-            if (pt->prev[w][z] != ~0u) {
+            if (pt->prev[w][z] != ~0u)
                 post[pt->prev[w][z]].next[w][z] = pt->next[w][z];
-                pt->prev[w][z] = ~0u;
-            } else {
+            else
                 pi[z] = pt->next[w][z];
-            }
+
+            pt->next[w][z] = ~0u;
+            pt->prev[w][z] = ~0u;
         }
     }
 
