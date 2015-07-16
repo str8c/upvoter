@@ -2,6 +2,7 @@
 */
 
 #include "main.h"
+#include "util.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -89,10 +90,19 @@ static void client_free(client_t *cl)
 */
 
 #define cmp(p, str) (!memcmp(*(p), str, sizeof(str) - 1) && (*(p) += sizeof(str) - 1, 1))
+
+static bool ref_eq_host(const char *ref, const char *host)
+{
+    if (!cmp(&ref, "http://") && !cmp(&ref, "https://"))
+        return 0;
+
+    return strcmp_slash(host, ref);
+}
+
 static void do_request(client_t *cl)
 {
     int len, res, content_length;
-    char *p, *path, *get, *host, *cookie, *real_ip, *content;
+    char *p, *path, *get, *host, *cookie, *real_ip, *content, *referer;
     bool post;
 
     cl->data[cl->dlen] = 0; /* work in null-terminated space */
@@ -122,6 +132,7 @@ static void do_request(client_t *cl)
 
     /* parse rest of header */
     host = 0;
+    referer = 0;
     cookie = 0;
     real_ip = 0;
     content_length = -1;
@@ -136,6 +147,12 @@ static void do_request(client_t *cl)
         /* host */
         if (cmp(&p, "Host: ")) {
             host = p;
+            continue;
+        }
+
+        /* referer */
+        if (cmp(&p, "Referer: ")) {
+            referer = p;
             continue;
         }
 
@@ -166,6 +183,10 @@ static void do_request(client_t *cl)
     content = 0;
     if (content_length > 0) {
         if (!post || content_length > POST_MAX)
+            goto invalid;
+
+        /* check referer==host */
+        if (!ref_eq_host(referer, host))
             goto invalid;
 
         /* check content */
