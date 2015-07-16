@@ -186,7 +186,7 @@ static void do_request(client_t *cl)
             goto invalid;
 
         /* check referer==host */
-        if (!ref_eq_host(referer, host))
+        if (referer && !ref_eq_host(referer, host))
             goto invalid;
 
         /* check content */
