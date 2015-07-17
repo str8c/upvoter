@@ -122,7 +122,7 @@ static const char* valid_domain(uint32_t len, const char *str)
         if (ch == '/')
             return str;
 
-        if (!((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '.'))
+        if (!((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '.' || ch == '#'))
             return 0;
     } while (--len && ch);
 
